@@ -24,7 +24,7 @@ export function useBooks(options = {}) {
             id, title, condition, price, original_price,
             images, urgent, verified, school, category, created_at,
             seller_id,
-            seller:seller_id!inner (name, rating_sum, rating_count)
+            seller:seller_id (name, rating_sum, rating_count)
           `)
           .eq("status", "active");
 

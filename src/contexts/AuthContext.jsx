@@ -62,7 +62,34 @@ export function AuthProvider({ children }) {
         .single();
       if (error) {
         console.warn('create user record error:', error);
-      } else {
+        // Nếu error (RLS violation hoặc email trùng), thử fetch lại
+        // 1. Fetch by id (có thể user đã được tạo bởi trigger/policy)
+        const { data: byId } = await supabase
+          .from('lb_users')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+        if (byId) {
+          setUserData(byId);
+          return;
+        }
+        // 2. Fetch by email (fallback)
+        const { data: byEmail } = await supabase
+          .from('lb_users')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
+        if (byEmail) {
+          setUserData(byEmail);
+          return;
+        }
+        // 3. Nếu vẫn không có, log error nhưng đừng crash
+        console.error('Could not find or create user record:', {
+          authId: authUser.id,
+          email: email,
+          error: error
+        });
+      } else if (newUser) {
         setUserData(newUser);
         // Tạo ví tự động
         await supabase.from('lb_wallets').insert([{ user_id: newUser.id, balance: 0 }]).maybeSingle();
@@ -131,6 +158,13 @@ export function AuthProvider({ children }) {
     return { error };
   };
 
+  const requireAuth = (mode = "login") => {
+    if (user) return true;
+    setAuthModalMode(mode);
+    setIsAuthModalOpen(true);
+    return false;
+  };
+
   const value = {
     user,
     userData,
@@ -144,6 +178,7 @@ export function AuthProvider({ children }) {
     setAuthModalMode,
     signOut,
     showToast,
+    requireAuth,
     updateProfile,
     resetPassword,
     updatePassword,
