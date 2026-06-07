@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function ProfileScreen() {
-  const { userData, updateProfile, showToast } = useAuth();
+  const { user, userData, updateProfile, showToast, requireAuth } = useAuth();
 
   const [name, setName] = useState(userData?.name || "");
   const [phone, setPhone] = useState(userData?.phone || "");
@@ -10,6 +11,20 @@ export default function ProfileScreen() {
   const [address, setAddress] = useState(userData?.address || "");
   const [avatarUrl, setAvatarUrl] = useState(userData?.avatar_url || "");
   const [loading, setLoading] = useState(false);
+
+  if (!user) {
+    requireAuth();
+    return (
+      <div className="max-w-4xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-slate-100 rounded-full mb-6">
+          <svg className="w-10 h-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">Bạn chưa đăng nhập</h2>
+        <p className="text-slate-600 mb-6">Vui lòng đăng nhập để xem và chỉnh sửa thông tin cá nhân.</p>
+        <Link to="/" className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</Link>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

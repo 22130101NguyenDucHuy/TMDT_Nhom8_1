@@ -363,6 +363,18 @@
   background: #fafafa;
 }
 
+.admin-table tbody tr.admin-table-row-link:hover {
+  background: #f0fdfa;
+}
+
+.admin-table tbody tr.admin-table-row-link:hover td {
+  color: #0f766e;
+}
+
+.admin-table tbody tr.admin-table-row-link:hover td strong {
+  color: #0f766e;
+}
+
 .admin-table tbody tr:last-child td {
   border-bottom: none;
 }

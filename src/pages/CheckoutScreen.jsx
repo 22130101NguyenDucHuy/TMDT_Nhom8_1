@@ -4,6 +4,7 @@ import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
 import { createTransaction, processWalletPayment } from "../services/payment";
+import { getMeetupSpots, getDefaultMeetupSpots } from "../utils/campusMeetup";
 
 // ─── Cấu hình phương thức vận chuyển ───────────────────────────────────────
 const DELIVERY_METHODS = [
@@ -69,6 +70,12 @@ export default function CheckoutScreen() {
   const [buyerAddress, setBuyerAddress]   = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState("meet");
   const [paymentMethod, setPaymentMethod]   = useState("wallet");
+  const [meetupSpot, setMeetupSpot]         = useState("");
+
+  // Gợi ý điểm hẹn dựa trên trường của người bán
+  const meetupSuggestions = book?.school
+    ? getMeetupSpots(book.school)
+    : getDefaultMeetupSpots();
 
   // ── Fetch dữ liệu — chỉ chạy khi đã có user ──────────────────────────────
   useEffect(() => {
@@ -102,6 +109,9 @@ export default function CheckoutScreen() {
   // ── Tính toán giá ─────────────────────────────────────────────────────────
   const deliveryFee   = DELIVERY_METHODS.find((d) => d.id === deliveryMethod)?.fee ?? 0;
   const bookPrice     = book?.price ?? 0;
+  const feeRate       = 5.00;
+  const feeAmount     = Math.round(bookPrice * feeRate / 100);
+  const netAmount     = bookPrice - feeAmount;
   const totalAmount   = bookPrice + deliveryFee;
   const sufficientFunds = wallet && wallet.balance >= totalAmount;
 
@@ -257,6 +267,48 @@ export default function CheckoutScreen() {
               className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
             />
           </div>
+          {deliveryMethod === "meet" && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                📍 Điểm hẹn giao dịch
+              </label>
+              {book?.school && (
+                <p className="text-xs text-teal-600 mb-2">
+                  🎓 Gợi ý điểm hẹn tại {book.school}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 mb-2">
+                {meetupSuggestions.map((spot) => (
+                  <button
+                    key={spot}
+                    type="button"
+                    onClick={() => {
+                      setMeetupSpot(spot);
+                      setBuyerAddress(spot);
+                    }}
+                    className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                      meetupSpot === spot
+                        ? "bg-teal-700 text-white border-teal-700"
+                        : "bg-white text-slate-700 border-slate-200 hover:border-teal-500"
+                    }`}
+                  >
+                    {meetupSpot === spot && <span className="mr-1">✓</span>}
+                    {spot}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={buyerAddress}
+                onChange={(e) => {
+                  setBuyerAddress(e.target.value);
+                  setMeetupSpot(e.target.value);
+                }}
+                placeholder="Hoặc nhập địa điểm khác..."
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+              />
+            </div>
+          )}
           {deliveryMethod !== "meet" && (
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -367,6 +419,17 @@ export default function CheckoutScreen() {
           <div className="flex justify-between text-slate-600">
             <span>Phí vận chuyển</span>
             <span>{deliveryFee === 0 ? "Miễn phí" : formatPrice(deliveryFee)}</span>
+          </div>
+          <div className="flex justify-between text-amber-600">
+            <span className="flex items-center gap-1">
+              Phí bảo chứng ({feeRate}%)
+              <span title="Phí giúp bảo vệ giao dịch và duy trì nền tảng" className="cursor-help text-amber-400">ⓘ</span>
+            </span>
+            <span>-{formatPrice(feeAmount)}</span>
+          </div>
+          <div className="flex justify-between text-emerald-600 text-xs bg-emerald-50 px-2 py-1.5 rounded-lg">
+            <span>Người bán thực nhận</span>
+            <span className="font-semibold">{formatPrice(netAmount)}</span>
           </div>
           <div className="flex justify-between font-extrabold text-base text-slate-900 pt-2 border-t border-slate-100">
             <span>Tổng thanh toán</span>
