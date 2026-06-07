@@ -14,8 +14,8 @@ export default function TopNav() {
         {/* --- Hàng trên: Logo / Tìm kiếm / Tài khoản --- */}
         <div className="flex items-center gap-4 h-16">
           {/* Logo */}
-          <Link to="/" className="flex-shrink-0 flex items-center">
-            <BrandLogo className="h-8 w-auto object-contain" />
+          <Link to="/" className="flex-shrink-0 flex items-center h-full">
+            <BrandLogo className="h-[90%] w-auto object-contain" />
           </Link>
 
           {/* Thanh tìm kiếm */}
