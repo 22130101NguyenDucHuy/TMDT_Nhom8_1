@@ -27,17 +27,44 @@ const categoryMeta = {
 };
 
 // Normalize book data từ Supabase
-const normalizeBook = (b) => ({
-  ...b,
-  image: Array.isArray(b.images) && b.images.length > 0 ? b.images[0] : null,
-  originalPrice: b.original_price,
-  seller: {
-    name: b.seller?.name || "Người bán",
-    rating: b.seller?.rating_count > 0
-      ? (b.seller.rating_sum / b.seller.rating_count).toFixed(1)
-      : "0.0",
-  },
-});
+const normalizeBook = (b) => {
+  const defaultImageMap = {
+    "chuyen-doi-so": "chuyendoi.jpg",
+    "benh-gom-den": "benhgomden.jpg",
+    "benh-heo": "benhheo.jpg",
+    "cong-nghe-mang-loc": "cnghemangloc.jpg",
+    "cong-nghe-nuoi-trong": "cnghenuoitrong.jpg",
+    "phat-trien-san-pham": "ptriensp.jpg",
+    "suc-ben-vat-lieu": "sbvl.jpg",
+    "xa-hoi-hoc": "xhh.jpg",
+    "anh-banner": "618572354_1397613058830175_8168212988356921032_n.jpg",
+  };
+
+  let imgs = [];
+  if (Array.isArray(b.images) && b.images.length > 0) {
+    imgs = b.images.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books2/${img}`);
+  } else {
+    const fallbackFile = defaultImageMap[b.id];
+    if (fallbackFile) {
+      imgs = [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${fallbackFile}`];
+    } else {
+      imgs = [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${b.id}_0.jpg`];
+    }
+  }
+
+  return {
+    ...b,
+    images: imgs,
+    image: imgs[0] || null,
+    originalPrice: b.original_price,
+    seller: {
+      name: b.seller?.name || "Người bán",
+      rating: b.seller?.rating_count > 0
+        ? (b.seller.rating_sum / b.seller.rating_count).toFixed(1)
+        : "0.0",
+    },
+  };
+};
 
 export default function ExploreScreen() {
   const [searchParams] = useSearchParams();

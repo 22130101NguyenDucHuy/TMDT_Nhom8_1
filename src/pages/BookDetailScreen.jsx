@@ -6,7 +6,6 @@ import BookCard from "../components/common/BookCard";
 import { useAuth } from "../contexts/AuthContext";
 import { useFavorite } from "../hooks/useFavorite";
 import QuickCheckoutModal from "../components/checkout/QuickCheckoutModal";
-import { getReputationBadges } from "../utils/reputationBadges";
 
 function ImageCarousel({ images, title }) {
   const [current, setCurrent] = useState(0);
@@ -85,14 +84,42 @@ export default function BookDetailScreen() {
         .eq("id", bookId)
         .single();
       if (bookData) {
-        setBook(bookData);
-        const sellerRating = bookData.seller && bookData.seller.rating_count > 0
-          ? (bookData.seller.rating_sum / bookData.seller.rating_count) : 0;
+        const defaultImageMap = {
+          "chuyen-doi-so": "chuyendoi.jpg",
+          "benh-gom-den": "benhgomden.jpg",
+          "benh-heo": "benhheo.jpg",
+          "cong-nghe-mang-loc": "cnghemangloc.jpg",
+          "cong-nghe-nuoi-trong": "cnghenuoitrong.jpg",
+          "phat-trien-san-pham": "ptriensp.jpg",
+          "suc-ben-vat-lieu": "sbvl.jpg",
+          "xa-hoi-hoc": "xhh.jpg",
+          "anh-banner": "618572354_1397613058830175_8168212988356921032_n.jpg",
+        };
+
+        const resolveImgs = (id, imagesList) => {
+          if (Array.isArray(imagesList) && imagesList.length > 0) {
+            return imagesList.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books2/${img}`);
+          } else {
+            const fallbackFile = defaultImageMap[id];
+            if (fallbackFile) {
+              return [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${fallbackFile}`];
+            } else {
+              return [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${id}_0.jpg`];
+            }
+          }
+        };
+
+        const mainImgs = resolveImgs(bookData.id, bookData.images);
+        setBook({
+          ...bookData,
+          images: mainImgs,
+          image: mainImgs[0] || null,
+        });
+
         setSeller({
           name: bookData.seller?.name || "Người bán",
-          rating: sellerRating.toFixed(1),
-          ratingCount: bookData.seller?.rating_count || 0,
-          badges: getReputationBadges(sellerRating, bookData.seller?.rating_count || 0),
+          rating: bookData.seller && bookData.seller.rating_count > 0
+            ? (bookData.seller.rating_sum / bookData.seller.rating_count).toFixed(1) : "0.0",
         });
         const { data: relData } = await supabase
           .from("lb_books")
@@ -102,9 +129,15 @@ export default function BookDetailScreen() {
           .neq("id", bookId)
           .limit(4);
         if (relData) {
-          setRelated(relData.map((b) => ({
-            ...b, image: b.images?.[0] || null, originalPrice: b.original_price,
-          })));
+          setRelated(relData.map((b) => {
+            const relImgs = resolveImgs(b.id, b.images);
+            return {
+              ...b,
+              images: relImgs,
+              image: relImgs[0] || null,
+              originalPrice: b.original_price,
+            };
+          }));
         }
       }
       setLoading(false);
@@ -289,22 +322,8 @@ export default function BookDetailScreen() {
                 </div>
                 <div className="flex items-center gap-1 text-xs">
                   <span className="text-yellow-500">{"★".repeat(Math.round(parseFloat(seller.rating) || 4))}</span>
-                  <span className="text-slate-400">({seller.rating}/5 · {seller.ratingCount} đánh giá)</span>
+                  <span className="text-slate-400">({seller.rating}/5)</span>
                 </div>
-                {/* Huy hiệu uy tín */}
-                {seller.badges && seller.badges.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {seller.badges.map((badge) => (
-                      <span
-                        key={badge.id}
-                        title={badge.description}
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badge.color} cursor-help`}
-                      >
-                        {badge.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
               <svg className="w-4 h-4 text-slate-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
             </div>
