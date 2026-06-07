@@ -7,3 +7,6 @@ dist/
 .env
 supabase/
 currentDB/
+.agents/
+skills-lock.json
+.codegraph/

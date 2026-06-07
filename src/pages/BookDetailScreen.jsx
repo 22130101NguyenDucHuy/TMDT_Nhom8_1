@@ -84,7 +84,38 @@ export default function BookDetailScreen() {
         .eq("id", bookId)
         .single();
       if (bookData) {
-        setBook(bookData);
+        const defaultImageMap = {
+          "chuyen-doi-so": "chuyendoi.jpg",
+          "benh-gom-den": "benhgomden.jpg",
+          "benh-heo": "benhheo.jpg",
+          "cong-nghe-mang-loc": "cnghemangloc.jpg",
+          "cong-nghe-nuoi-trong": "cnghenuoitrong.jpg",
+          "phat-trien-san-pham": "ptriensp.jpg",
+          "suc-ben-vat-lieu": "sbvl.jpg",
+          "xa-hoi-hoc": "xhh.jpg",
+          "anh-banner": "618572354_1397613058830175_8168212988356921032_n.jpg",
+        };
+
+        const resolveImgs = (id, imagesList) => {
+          if (Array.isArray(imagesList) && imagesList.length > 0) {
+            return imagesList.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books2/${img}`);
+          } else {
+            const fallbackFile = defaultImageMap[id];
+            if (fallbackFile) {
+              return [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${fallbackFile}`];
+            } else {
+              return [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${id}_0.jpg`];
+            }
+          }
+        };
+
+        const mainImgs = resolveImgs(bookData.id, bookData.images);
+        setBook({
+          ...bookData,
+          images: mainImgs,
+          image: mainImgs[0] || null,
+        });
+
         setSeller({
           name: bookData.seller?.name || "Người bán",
           rating: bookData.seller && bookData.seller.rating_count > 0
@@ -98,9 +129,15 @@ export default function BookDetailScreen() {
           .neq("id", bookId)
           .limit(4);
         if (relData) {
-          setRelated(relData.map((b) => ({
-            ...b, image: b.images?.[0] || null, originalPrice: b.original_price,
-          })));
+          setRelated(relData.map((b) => {
+            const relImgs = resolveImgs(b.id, b.images);
+            return {
+              ...b,
+              images: relImgs,
+              image: relImgs[0] || null,
+              originalPrice: b.original_price,
+            };
+          }));
         }
       }
       setLoading(false);
