@@ -13,11 +13,22 @@ export default function AuthModal() {
 
   if (!isAuthModalOpen) return null;
 
+  // Regex xác thực email trường học .edu.vn
+  const isEduEmail = (email) => {
+    return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.edu\.vn$/i.test(email);
+  };
+
   const handleAuth = async (e) => {
     e.preventDefault();
 
     if (authModalMode === "register" && password !== confirmPassword) {
       setError("Mật khẩu xác nhận không khớp.");
+      return;
+    }
+
+    // Kiểm tra email .edu.vn khi đăng ký
+    if (authModalMode === "register" && !isEduEmail(email)) {
+      setError("Vui lòng sử dụng email trường học có đuôi .edu.vn để đăng ký.");
       return;
     }
 
@@ -59,7 +70,7 @@ export default function AuthModal() {
           await supabase.auth.signOut();
         }
 
-        showToast("Đăng ký thành công!", "success");
+        showToast("Đăng ký thành công! Vui lòng kiểm tra email để xác thực.", "success");
         closeAuthModal();
         setConfirmPassword("");
         setPassword("");

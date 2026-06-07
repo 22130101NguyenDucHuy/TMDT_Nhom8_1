@@ -159,7 +159,7 @@ export async function createUser(userData) {
 
 export async function getListings(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_books').select('*, seller:seller_id!inner(id, name, rating_sum, rating_count)', { count: 'exact' });
+    let query = supabase.from('lb_books').select('*, seller:seller_id(id, name, rating_sum, rating_count)', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.category) query = query.eq('category', filters.category);
     if (filters.search) query = query.ilike('title', `%${filters.search}%`);
@@ -183,7 +183,7 @@ export async function getListings(filters = {}, page = 1, perPage = 20) {
 
 export async function getListingById(id) {
   try {
-    const { data, error } = await supabase.from('lb_books').select('*, seller:seller_id!inner(id, name, rating_sum, rating_count)').eq('id', id).single();
+    const { data, error } = await supabase.from('lb_books').select('*, seller:seller_id(id, name, rating_sum, rating_count)').eq('id', id).single();
     if (error) throw error;
     if (data) {
       data.seller = data.seller ? { name: data.seller.name, rating: (data.seller.rating_count || 0) > 0 ? (data.seller.rating_sum / data.seller.rating_count).toFixed(1) : '0.0', response_time: '—' } : { name: 'Người bán', rating: '0.0', response_time: '—' };
@@ -230,7 +230,7 @@ export async function deleteListing(listingId) {
 
 export async function getTransactions(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_transactions').select('*, buyer:buyer_id!inner(id, name), seller:seller_id!inner(id, name)', { count: 'exact' });
+    let query = supabase.from('lb_transactions').select('*, buyer:buyer_id(id, name), seller:seller_id(id, name)', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.type) query = query.eq('type', filters.type);
     if (filters.search) query = query.or(`book.ilike.%${filters.search}%,buyer.name.ilike.%${filters.search}%,seller.name.ilike.%${filters.search}%`);
@@ -342,7 +342,7 @@ export async function deleteCategory(id) {
 
 export async function getDisputes(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_disputes').select('*, buyer:buyer_id!inner(id, name), seller:seller_id!inner(id, name)', { count: 'exact' });
+    let query = supabase.from('lb_disputes').select('*, buyer:buyer_id(id, name), seller:seller_id(id, name)', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
@@ -386,7 +386,7 @@ export async function updateDisputeStatus(disputeId, status, resolutionNote, res
 
 export async function getReports(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_reports').select('*, reporter:reporter_id!inner(id, name)', { count: 'exact' });
+    let query = supabase.from('lb_reports').select('*, reporter:reporter_id(id, name)', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.type) query = query.eq('report_type', filters.type);
     const from = (page - 1) * perPage;
@@ -429,31 +429,144 @@ export async function updateReportStatus(reportId, status, actionTaken, handledB
 // ANALYTICS
 // ============================================================================
 
+// Parse amount từ text dạng "125.000đ", "99,000", "125000" → number
+function parseAmount(raw) {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === 'number') return raw;
+  // Xoá ký tự không phải số, dấu chấm, dấu phẩy
+  const cleaned = String(raw).replace(/[^\d.,]/g, '');
+  if (!cleaned) return 0;
+  // Nếu có dấu chấm hàng nghìn kiểu Việt Nam: "125.000" → 125000
+  // Phân biệt: nếu có dấu chấm mà phần sau chấm cuối là 3 chữ số → hàng nghìn
+  if (cleaned.includes('.') && !cleaned.includes(',')) {
+    const parts = cleaned.split('.');
+    const lastPart = parts[parts.length - 1];
+    if (lastPart.length === 3) {
+      // dạng "125.000" hoặc "1.125.000" → loại dấu chấm
+      return parseInt(cleaned.replace(/\./g, ''), 10) || 0;
+    }
+    // dạng "125.5" → số thập phân
+    return parseFloat(cleaned) || 0;
+  }
+  // Có dấu phẩy: "125,000" → loại dấu phẩy
+  if (cleaned.includes(',')) {
+    return parseInt(cleaned.replace(/,/g, ''), 10) || 0;
+  }
+  return parseInt(cleaned, 10) || 0;
+}
+
 export async function getAnalytics(filters = {}) {
   try {
-    let query = supabase.from('lb_analytics').select('*');
-    if (filters.startDate && filters.endDate) {
-      query = query.gte('date', filters.startDate).lte('date', filters.endDate);
-    }
-    if (filters.metricType) query = query.eq('metric_type', filters.metricType);
-    const { data, error } = await query.order('date', { ascending: false });
-    if (error) throw error;
-    // Normalize: map category -> metric_type for backward compat
-    return (data || []).map(a => ({ ...a, category: a.metric_type }));
+    const { startDate, endDate } = filters;
+
+    // Fetch completed transactions for revenue
+    let txnQuery = supabase
+      .from('lb_transactions')
+      .select('created_at, amount')
+      .eq('status', 'completed');
+    if (startDate) txnQuery = txnQuery.gte('created_at', startDate);
+    if (endDate)   txnQuery = txnQuery.lte('created_at', endDate + ' 23:59:59');
+    const { data: txns, error: txnErr } = await txnQuery;
+    if (txnErr) throw txnErr;
+
+    // Fetch users for growth
+    let userQuery = supabase.from('lb_users').select('join_date, created_at');
+    if (startDate) userQuery = userQuery.gte('join_date', startDate);
+    if (endDate)   userQuery = userQuery.lte('join_date', endDate);
+    const { data: users, error: userErr } = await userQuery;
+    if (userErr) throw userErr;
+
+    // Aggregate revenue by date
+    const revenueByDate = {};
+    (txns || []).forEach(t => {
+      const d = t.created_at ? String(t.created_at).slice(0, 10) : null;
+      if (!d) return;
+      if (!revenueByDate[d]) revenueByDate[d] = 0;
+      revenueByDate[d] += parseAmount(t.amount);
+    });
+
+    // Aggregate users by join_date
+    const usersByDate = {};
+    (users || []).forEach(u => {
+      const d = u.join_date ? String(u.join_date).slice(0, 10) : (u.created_at ? String(u.created_at).slice(0, 10) : null);
+      if (!d) return;
+      if (!usersByDate[d]) usersByDate[d] = 0;
+      usersByDate[d]++;
+    });
+
+    // Merge into sorted array
+    const allDates = new Set([...Object.keys(revenueByDate), ...Object.keys(usersByDate)]);
+    const sorted = [...allDates].sort();
+    return sorted.map(date => ({
+      date,
+      total_revenue: revenueByDate[date] || 0,
+      revenue: revenueByDate[date] || 0,
+      new_users: usersByDate[date] || 0,
+      total_users: 0,
+      total_listings: 0,
+      total_transactions: 0,
+      completed_transactions: 0,
+      platform_fee: 0,
+    }));
   } catch (err) {
     console.warn('getAnalytics fallback:', err?.message);
-    return [...MOCK.analytics];
+    try {
+      // Fallback: compute from transactions manually
+      const { data: allTxns } = await supabase
+        .from('lb_transactions')
+        .select('created_at, amount, status');
+      if (!allTxns) return [];
+
+      const fallbackRevenue = {};
+      (allTxns || []).forEach(t => {
+        const d = t.created_at ? String(t.created_at).slice(0, 10) : null;
+        if (!d || t.status !== 'completed') return;
+        if (!fallbackRevenue[d]) fallbackRevenue[d] = 0;
+        fallbackRevenue[d] += parseAmount(t.amount);
+      });
+      return Object.entries(fallbackRevenue)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, revenue]) => ({
+          date,
+          total_revenue: revenue,
+          revenue,
+          new_users: 0, total_users: 0, total_listings: 0,
+          total_transactions: 0, completed_transactions: 0, platform_fee: 0,
+        }));
+    } catch {
+      return [];
+    }
+  }
+}
+
+export async function getCategoryStats() {
+  // Đếm số sách active theo từng category trực tiếp từ lb_books
+  try {
+    const { data, error } = await supabase
+      .from('lb_books')
+      .select('category')
+      .eq('status', 'active');
+    if (error) throw error;
+    const map = {};
+    (data || []).forEach(b => {
+      if (b.category) map[b.category] = (map[b.category] || 0) + 1;
+    });
+    return map; // { "kinh-te": 12, "luat": 5, ... }
+  } catch (err) {
+    console.warn('getCategoryStats fallback:', err?.message);
+    return {};
   }
 }
 
 export async function getDashboardStats() {
   try {
-    const [users, listings, transactions, disputes, reports] = await Promise.all([
+    const [users, listings, transactions, disputes, reports, premiums] = await Promise.all([
       supabase.from('lb_users').select('*', { count: 'exact', head: true }),
       supabase.from('lb_books').select('*', { count: 'exact', head: true }),
       supabase.from('lb_transactions').select('*', { count: 'exact', head: true }),
       supabase.from('lb_disputes').select('*', { count: 'exact', head: true }),
       supabase.from('lb_reports').select('*', { count: 'exact', head: true }),
+      supabase.from('lb_listing_promotions').select('*', { count: 'exact', head: true }).eq('is_active', true),
     ]);
     return {
       totalUsers: users.count || 0,
@@ -461,6 +574,7 @@ export async function getDashboardStats() {
       totalTransactions: transactions.count || 0,
       totalDisputes: disputes.count || 0,
       totalReports: reports.count || 0,
+      totalPremium: premiums.count || 0,
     };
   } catch (err) {
     console.warn('getDashboardStats fallback:', err?.message);
@@ -470,6 +584,7 @@ export async function getDashboardStats() {
       totalTransactions: MOCK.transactions.length,
       totalDisputes: MOCK.disputes.length,
       totalReports: MOCK.reports.length,
+      totalPremium: 0,
     };
   }
 }
@@ -527,7 +642,7 @@ export async function updateSetting(key, value) {
 
 export async function getComplaints(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_complaints').select('*, complainant:complainant_id!inner(id, name), defendant:defendant_id!inner(id, name)', { count: 'exact' });
+    let query = supabase.from('lb_complaints').select('*, complainant:complainant_id(id, name), defendant:defendant_id(id, name)', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.type) query = query.eq('type', filters.type);
     const from = (page - 1) * perPage;
@@ -562,7 +677,7 @@ export async function updateComplaintStatus(complaintId, status, resolutionNote,
 
 export async function getPromotions(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_listing_promotions').select('*, book:book_id!inner(title), user:user_id!inner(name)', { count: 'exact' });
+    let query = supabase.from('lb_listing_promotions').select('*, book:book_id(id, title), user:user_id(id, name)', { count: 'exact' });
     if (filters.is_active !== undefined) query = query.eq('is_active', filters.is_active);
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;

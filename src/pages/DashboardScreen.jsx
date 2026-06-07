@@ -78,8 +78,37 @@ export default function DashboardScreen() {
     );
   }
 
-  // Đếm số bài theo từng trạng thái
-  const tabCounts = {}; // Có thể làm thêm sau
+  const handleMarkSold = async (bookId) => {
+    if (!window.confirm("Xác nhận đánh dấu tài liệu này đã bán?")) return;
+    try {
+      const { error } = await supabase
+        .from("lb_books")
+        .update({ status: "sold", is_sold: true, sold_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", bookId)
+        .eq("seller_id", user.id);
+      if (error) throw error;
+      showToast("Đã đánh dấu đã bán!", "success");
+      setBooks(books.filter(b => b.id !== bookId));
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra", "error");
+    }
+  };
+
+  const handleDelete = async (bookId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa tài liệu này?")) return;
+    try {
+      const { error } = await supabase
+        .from("lb_books")
+        .delete()
+        .eq("id", bookId)
+        .eq("seller_id", user.id);
+      if (error) throw error;
+      showToast("Đã xóa tài liệu!", "success");
+      setBooks(books.filter(b => b.id !== bookId));
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra", "error");
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto py-6 flex flex-col gap-6">
@@ -185,10 +214,33 @@ export default function DashboardScreen() {
                       <Link
                         to={`/sach/${book.id}`}
                         className="text-xs text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full hover:bg-slate-100 transition-colors"
-                        title="Xem"
                       >
                         Xem
                       </Link>
+                      {book.status === "active" && (
+                        <>
+                          <Link
+                            to={`/sua-bai/${book.id}`}
+                            className="text-xs text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-50 transition-colors"
+                          >
+                            Sửa
+                          </Link>
+                          <button
+                            onClick={() => handleMarkSold(book.id)}
+                            className="text-xs text-green-600 border border-green-200 px-2 py-0.5 rounded-full hover:bg-green-50 transition-colors"
+                          >
+                            Đã bán
+                          </button>
+                        </>
+                      )}
+                      {book.status !== "sold" && (
+                        <button
+                          onClick={() => handleDelete(book.id)}
+                          className="text-xs text-red-500 border border-red-200 px-2 py-0.5 rounded-full hover:bg-red-50 transition-colors"
+                        >
+                          Xóa
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -204,9 +256,10 @@ export default function DashboardScreen() {
             <div className="flex flex-col gap-2">
               {[
                 { label: "Ví tiền & Doanh thu", to: "/vi-tien", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg> },
-                { label: "Lịch sử giao dịch", to: "/giao-dich", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg> },
+                { label: "Lịch sử giao dịch", to: "/my-transactions", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg> },
                 { label: "Tin nhắn", to: "/tin-nhan", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg> },
                 { label: "Dịch vụ đẩy tin", to: "/dich-vu", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
+                { label: "Yêu thích", to: "/yeu-thich", icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg> },
               ].map(({ label, to, icon }) => (
                 <Link
                   key={to}

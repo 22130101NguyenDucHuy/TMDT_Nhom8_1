@@ -3,13 +3,22 @@ import { Link } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
+import { depositWallet, withdrawWallet } from "../services/payment";
 
 export default function WalletScreen() {
-  const { userData } = useAuth();
+  const { userData, showToast } = useAuth();
 
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showDeposit, setShowDeposit] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!userData) {
@@ -39,6 +48,59 @@ export default function WalletScreen() {
     };
     fetchWallet();
   }, [userData]);
+
+  const handleDeposit = async () => {
+    const amount = parseInt(depositAmount.replace(/\D/g, ""), 10);
+    if (!amount || amount <= 0) {
+      showToast("Vui lòng nhập số tiền hợp lệ", "error");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await depositWallet(userData.id, amount);
+      showToast(`Nạp thành công ${formatPrice(amount)} vào ví!`, "success");
+      setShowDeposit(false);
+      setDepositAmount("");
+      const { data: w } = await supabase.from("lb_wallets").select("*").eq("user_id", userData.id).maybeSingle();
+      setWallet(w);
+    } catch (err) {
+      showToast(err.message || "Nạp tiền thất bại", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    const amount = parseInt(withdrawAmount.replace(/\D/g, ""), 10);
+    if (!amount || amount <= 0) {
+      showToast("Vui lòng nhập số tiền hợp lệ", "error");
+      return;
+    }
+    if (!bankName.trim() || !accountNumber.trim() || !accountHolder.trim()) {
+      showToast("Vui lòng nhập đầy đủ thông tin ngân hàng", "error");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await withdrawWallet(userData.id, amount, {
+        bankName: bankName.trim(),
+        accountNumber: accountNumber.trim(),
+        accountHolder: accountHolder.trim(),
+      });
+      showToast("Yêu cầu rút tiền đã được ghi nhận!", "success");
+      setShowWithdraw(false);
+      setWithdrawAmount("");
+      setBankName("");
+      setAccountNumber("");
+      setAccountHolder("");
+      const { data: w } = await supabase.from("lb_wallets").select("*").eq("user_id", userData.id).maybeSingle();
+      setWallet(w);
+    } catch (err) {
+      showToast(err.message || "Rút tiền thất bại", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (!userData) {
     return (
@@ -71,7 +133,17 @@ export default function WalletScreen() {
           <h1 className="text-2xl font-bold text-slate-900">Ví & Doanh thu</h1>
         </div>
         <div className="flex gap-3">
-          <button className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-semibold text-sm transition-colors">
+          <button
+            onClick={() => setShowWithdraw(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg font-semibold text-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19V5M5 12l7-7 7 7" /></svg>
+            Rút tiền
+          </button>
+          <button
+            onClick={() => setShowDeposit(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-semibold text-sm transition-colors"
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v14M5 12l7-7 7 7" /></svg>
             Nạp ví
           </button>
@@ -148,6 +220,93 @@ export default function WalletScreen() {
           </div>
         )}
       </div>
+
+      {showDeposit && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => !submitting && setShowDeposit(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Nạp tiền vào ví</h3>
+              <button onClick={() => !submitting && setShowDeposit(false)} className="text-slate-400 hover:text-slate-600">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">Nhập số tiền bạn muốn nạp vào ví LoopBook.</p>
+            <div className="relative mb-4">
+              <input
+                type="text"
+                value={depositAmount}
+                onChange={e => setDepositAmount(e.target.value.replace(/\D/g, "").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1."))}
+                className="vinted-input text-lg font-bold text-center py-4"
+                placeholder="0"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₫</span>
+            </div>
+            <div className="flex gap-2 mb-4">
+              {[50000, 100000, 200000, 500000].map(amt => (
+                <button
+                  key={amt}
+                  onClick={() => setDepositAmount(amt.toLocaleString("vi-VN"))}
+                  className="flex-1 py-2 text-xs font-semibold rounded-lg border border-slate-200 hover:border-teal-500 hover:bg-teal-50 transition-colors"
+                >
+                  {formatPrice(amt)}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleDeposit}
+              disabled={submitting}
+              className="w-full py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold transition-colors disabled:opacity-50"
+            >
+              {submitting ? "Đang xử lý..." : "Xác nhận nạp tiền"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showWithdraw && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => !submitting && setShowWithdraw(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Rút tiền về ngân hàng</h3>
+              <button onClick={() => !submitting && setShowWithdraw(false)} className="text-slate-400 hover:text-slate-600">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Số tiền rút</label>
+                <input
+                  type="text"
+                  value={withdrawAmount}
+                  onChange={e => setWithdrawAmount(e.target.value.replace(/\D/g, "").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1."))}
+                  className="vinted-input"
+                  placeholder="0"
+                />
+                <p className="text-xs text-slate-400 mt-1">Số dư hiện tại: {formatPrice(balance)}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Ngân hàng thụ hưởng</label>
+                <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} className="vinted-input" placeholder="VD: Vietcombank" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Số tài khoản</label>
+                <input type="text" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} className="vinted-input" placeholder="VD: 1234567890" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Chủ tài khoản</label>
+                <input type="text" value={accountHolder} onChange={e => setAccountHolder(e.target.value)} className="vinted-input" placeholder="VD: NGUYEN VAN A" />
+              </div>
+            </div>
+            <button
+              onClick={handleWithdraw}
+              disabled={submitting || balance <= 0}
+              className="w-full py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold transition-colors disabled:opacity-50"
+            >
+              {submitting ? "Đang xử lý..." : "Gửi yêu cầu rút tiền"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

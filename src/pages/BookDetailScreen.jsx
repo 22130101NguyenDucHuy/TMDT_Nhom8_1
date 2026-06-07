@@ -6,6 +6,7 @@ import BookCard from "../components/common/BookCard";
 import { useAuth } from "../contexts/AuthContext";
 import { useFavorite } from "../hooks/useFavorite";
 import QuickCheckoutModal from "../components/checkout/QuickCheckoutModal";
+import { getReputationBadges } from "../utils/reputationBadges";
 
 function ImageCarousel({ images, title }) {
   const [current, setCurrent] = useState(0);
@@ -85,10 +86,13 @@ export default function BookDetailScreen() {
         .single();
       if (bookData) {
         setBook(bookData);
+        const sellerRating = bookData.seller && bookData.seller.rating_count > 0
+          ? (bookData.seller.rating_sum / bookData.seller.rating_count) : 0;
         setSeller({
           name: bookData.seller?.name || "Người bán",
-          rating: bookData.seller && bookData.seller.rating_count > 0
-            ? (bookData.seller.rating_sum / bookData.seller.rating_count).toFixed(1) : "0.0",
+          rating: sellerRating.toFixed(1),
+          ratingCount: bookData.seller?.rating_count || 0,
+          badges: getReputationBadges(sellerRating, bookData.seller?.rating_count || 0),
         });
         const { data: relData } = await supabase
           .from("lb_books")
@@ -285,8 +289,22 @@ export default function BookDetailScreen() {
                 </div>
                 <div className="flex items-center gap-1 text-xs">
                   <span className="text-yellow-500">{"★".repeat(Math.round(parseFloat(seller.rating) || 4))}</span>
-                  <span className="text-slate-400">({seller.rating}/5)</span>
+                  <span className="text-slate-400">({seller.rating}/5 · {seller.ratingCount} đánh giá)</span>
                 </div>
+                {/* Huy hiệu uy tín */}
+                {seller.badges && seller.badges.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {seller.badges.map((badge) => (
+                      <span
+                        key={badge.id}
+                        title={badge.description}
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badge.color} cursor-help`}
+                      >
+                        {badge.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <svg className="w-4 h-4 text-slate-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
             </div>

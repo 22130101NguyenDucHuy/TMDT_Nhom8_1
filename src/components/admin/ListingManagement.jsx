@@ -1,206 +1,342 @@
-import { useEffect, useMemo, useState } from "react";
-import { books } from "../../data/siteData";
+import { useEffect, useState } from "react";
+import { getListings, updateListingStatus } from "../../services/admin";
 
-export default function ListingManagement() {
-  const [listings, setListings] = useState(
-    books.map((book, idx) => ({
-      id: book.id ?? idx + 1,
-      title: book.title,
-      seller: book.seller?.name ?? "Nguyễn Minh Anh",
-      category: book.category ?? "Kinh tế",
-      price: book.price,
-      condition: "85%",
-      status: idx % 3 === 0 ? "pending" : idx % 3 === 1 ? "published" : "flagged",
-      views: Math.floor(Math.random() * 500),
-      createdDate: "2024-03-25"
-    }))
+// ── Modal từ chối ─────────────────────────────────────────────────────────────
+function RejectModal({ listing, onConfirm, onCancel }) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    if (!reason.trim()) return;
+    setSubmitting(true);
+    await onConfirm(listing.id, reason.trim());
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+        <h2 className="text-lg font-bold text-slate-900 mb-1">Từ chối bài đăng</h2>
+        <p className="text-sm text-slate-500 mb-4">
+          Bài: <span className="font-semibold text-slate-700">{listing.title}</span>
+        </p>
+        <label className="block text-sm font-semibold text-slate-700 mb-2">
+          Lý do từ chối <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-teal-500 h-28"
+          placeholder="VD: Tiêu đề không rõ ràng, ảnh không đủ chất lượng, vi phạm quy định..."
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          autoFocus
+        />
+        <div className="flex justify-end gap-3 mt-4">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!reason.trim() || submitting}
+            className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {submitting ? "Đang xử lý..." : "Xác nhận từ chối"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
+}
 
+// ── Action buttons theo trạng thái ───────────────────────────────────────────
+function ActionButtons({ listing, onApprove, onReject, onFlag, onRestore }) {
+  // Ngăn click button lan lên row (tránh mở tab mới khi nhấn action)
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+
+  return (
+    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+      {/* pending → Duyệt + Từ chối */}
+      {listing.status === "pending" && (
+        <>
+          <button
+            className="admin-btn admin-btn-success"
+            style={{ padding: "5px 10px", fontSize: "12px" }}
+            onClick={stop(() => onApprove(listing.id))}
+            title="Duyệt bài đăng — chuyển sang active"
+          >
+            Duyệt
+          </button>
+          <button
+            className="admin-btn admin-btn-danger"
+            style={{ padding: "5px 10px", fontSize: "12px" }}
+            onClick={stop(() => onReject(listing))}
+            title="Từ chối kèm lý do"
+          >
+            Từ chối
+          </button>
+        </>
+      )}
+
+      {/* active → Gỡ xuống */}
+      {listing.status === "active" && (
+        <button
+          className="admin-btn"
+          style={{ padding: "5px 10px", fontSize: "12px", background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}
+          onClick={stop(() => onFlag(listing.id))}
+          title="Gỡ bài xuống — chuyển sang flagged để xem xét"
+        >
+          Gỡ xuống
+        </button>
+      )}
+
+      {/* flagged → Khôi phục hoặc Từ chối vĩnh viễn */}
+      {listing.status === "flagged" && (
+        <>
+          <button
+            className="admin-btn admin-btn-success"
+            style={{ padding: "5px 10px", fontSize: "12px" }}
+            onClick={stop(() => onRestore(listing.id))}
+            title="Khôi phục — chuyển lại active"
+          >
+            Khôi phục
+          </button>
+          <button
+            className="admin-btn admin-btn-danger"
+            style={{ padding: "5px 10px", fontSize: "12px" }}
+            onClick={stop(() => onReject(listing))}
+            title="Từ chối vĩnh viễn kèm lý do"
+          >
+            Từ chối
+          </button>
+        </>
+      )}
+
+      {/* rejected / sold / draft → không có action */}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+export default function ListingManagement() {
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortConfig, setSortConfig] = useState({ key: "createdDate", direction: "desc" });
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 8;
+  const [rejectTarget, setRejectTarget] = useState(null); // listing đang chờ từ chối
 
-  const filteredListings = useMemo(() => (
-    listings.filter((listing) => {
-      const matchStatus = filterStatus === "all" || listing.status === filterStatus;
-      const matchSearch = listing.title.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchStatus && matchSearch;
-    })
-  ), [filterStatus, listings, searchTerm]);
-
-  const sortedListings = useMemo(() => {
-    const sorted = [...filteredListings];
-    const { key, direction } = sortConfig;
-    const dir = direction === "asc" ? 1 : -1;
-
-    sorted.sort((a, b) => {
-      const aValue = a[key];
-      const bValue = b[key];
-
-      if (key === "createdDate") {
-        const aDate = new Date(aValue);
-        const bDate = new Date(bValue);
-        return (aDate - bDate) * dir;
-      }
-
-      if (typeof aValue === "number" && typeof bValue === "number") {
-        return (aValue - bValue) * dir;
-      }
-
-      return String(aValue).localeCompare(String(bValue), "vi") * dir;
-    });
-
-    return sorted;
-  }, [filteredListings, sortConfig]);
-
-  const totalPages = Math.max(1, Math.ceil(sortedListings.length / pageSize));
-  const currentListings = sortedListings.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
-
-  const handleSort = (key) => {
-    setSortConfig((prev) => {
-      if (prev.key === key) {
-        return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
-      }
-      return { key, direction: "asc" };
-    });
-    setCurrentPage(1);
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filterStatus, searchTerm]);
-
-  const handleApprove = (id) => {
-    setListings(listings.map(l => l.id === id ? { ...l, status: "published" } : l));
+  const loadListings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const filters = {};
+      if (filterStatus !== "all") filters.status = filterStatus;
+      if (searchTerm) filters.search = searchTerm;
+      const result = await getListings(filters);
+      setListings(result.data || []);
+    } catch (err) {
+      console.error("Failed to load listings:", err);
+      setError("Không thể tải danh sách");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReject = (id) => {
-    setListings(listings.filter(l => l.id !== id));
+  useEffect(() => { loadListings(); }, [filterStatus, searchTerm]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleApprove = async (id) => {
+    try {
+      await updateListingStatus(id, "active");
+      showSuccess("Đã duyệt bài đăng thành công");
+      loadListings();
+    } catch {
+      setError("Không thể duyệt bài đăng");
+    }
   };
+
+  const handleRejectConfirm = async (id, reason) => {
+    try {
+      await updateListingStatus(id, "rejected", reason);
+      setRejectTarget(null);
+      showSuccess("Đã từ chối bài đăng");
+      loadListings();
+    } catch {
+      setError("Không thể từ chối bài đăng");
+    }
+  };
+
+  const handleFlag = async (id) => {
+    try {
+      await updateListingStatus(id, "flagged");
+      showSuccess("Đã gỡ bài đăng xuống để xem xét");
+      loadListings();
+    } catch {
+      setError("Không thể gỡ bài đăng");
+    }
+  };
+
+  const handleRestore = async (id) => {
+    try {
+      await updateListingStatus(id, "active");
+      showSuccess("Đã khôi phục bài đăng");
+      loadListings();
+    } catch {
+      setError("Không thể khôi phục bài đăng");
+    }
+  };
+
+  // ── Status helpers ─────────────────────────────────────────────────────────
 
   const statusColor = (status) => {
-    switch(status) {
-      case "published": return "admin-badge-success";
-      case "pending": return "admin-badge-warning";
-      case "flagged": return "admin-badge-danger";
-      default: return "admin-badge-info";
+    switch (status) {
+      case "active":   return "admin-badge-success";
+      case "pending":  return "admin-badge-warning";
+      case "rejected": return "admin-badge-danger";
+      case "flagged":  return "admin-badge-danger";
+      case "sold":     return "admin-badge-info";
+      default:         return "admin-badge-info";
     }
   };
 
   const statusText = (status) => {
-    switch(status) {
-      case "published": return "Đã Duyệt";
-      case "pending": return "Chờ Duyệt";
-      case "flagged": return "Vi Phạm";
-      default: return status;
+    switch (status) {
+      case "active":   return "Đã Duyệt";
+      case "pending":  return "Chờ Duyệt";
+      case "rejected": return "Đã Từ Chối";
+      case "flagged":  return "Vi Phạm";
+      case "sold":     return "Đã Bán";
+      case "draft":    return "Nháp";
+      default:         return status;
     }
-  };
-
-  const getSortSymbol = (key) => {
-    if (sortConfig.key !== key) return "^v";
-    return sortConfig.direction === "asc" ? "^" : "v";
   };
 
   return (
     <div className="admin-page">
+      {/* Reject Modal */}
+      {rejectTarget && (
+        <RejectModal
+          listing={rejectTarget}
+          onConfirm={handleRejectConfirm}
+          onCancel={() => setRejectTarget(null)}
+        />
+      )}
+
       <div className="admin-header">
-        <h1>Quản Lý Listing/Sách</h1>
-        <div className="admin-actions">
-          <button className="admin-btn admin-btn-secondary">Báo Cáo</button>
-        </div>
+        <h1>Quản Lý Listing / Sách</h1>
       </div>
+
+      {/* Thông báo */}
+      {error && (
+        <div style={{ background: "#fef2f2", color: "#dc2626", padding: "12px 16px", borderRadius: "8px", marginBottom: "16px", fontSize: "14px" }}>
+          {error}
+        </div>
+      )}
+      {successMsg && (
+        <div style={{ background: "#f0fdf4", color: "#15803d", padding: "12px 16px", borderRadius: "8px", marginBottom: "16px", fontSize: "14px" }}>
+          ✓ {successMsg}
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="admin-filter-bar">
         <div className="admin-filter-search-wrap">
-          <svg className="admin-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input 
-            type="text" 
-            className="admin-filter-input with-search" 
+          <svg className="admin-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            className="admin-filter-input with-search"
             placeholder="Tìm theo tên sách..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <select 
+        <select
           className="admin-filter-select"
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
         >
           <option value="all">Tất Cả Trạng Thái</option>
-          <option value="published">Đã Duyệt</option>
           <option value="pending">Chờ Duyệt</option>
+          <option value="active">Đã Duyệt</option>
           <option value="flagged">Vi Phạm</option>
+          <option value="rejected">Đã Từ Chối</option>
+          <option value="sold">Đã Bán</option>
+          <option value="draft">Nháp</option>
         </select>
       </div>
 
-      {/* Listings Table */}
+      {/* Table */}
       <div className="admin-table-wrapper">
         <table className="admin-table">
           <thead>
             <tr>
               <th>Tên Sách</th>
               <th>Người Bán</th>
-              <th>Danh Mục</th>
               <th>Giá</th>
               <th>Trạng Thái</th>
-              <th>Lượt Xem</th>
               <th>Ngày Tạo</th>
               <th>Hành Động</th>
             </tr>
           </thead>
           <tbody>
-            {filteredListings.map(listing => (
-              <tr key={listing.id}>
-                <td><strong>{listing.title}</strong></td>
-                <td>{listing.seller}</td>
-                <td>{listing.category}</td>
-                <td style={{ fontWeight: 600 }}>{listing.price.toLocaleString("vi-VN")}đ</td>
+            {loading ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
+                  Đang tải...
+                </td>
+              </tr>
+            ) : listings.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
+                  Không có listing nào
+                </td>
+              </tr>
+            ) : listings.map((listing) => (
+              <tr
+                key={listing.id}
+                onClick={() => window.open(`/sach/${listing.id}`, "_blank")}
+                style={{ cursor: "pointer" }}
+                className="admin-table-row-link"
+              >
+                <td>
+                  <div>
+                    <strong style={{ display: "block" }}>{listing.title}</strong>
+                    {listing.reject_reason && (
+                      <span style={{ fontSize: "11px", color: "#dc2626" }}>
+                        Lý do: {listing.reject_reason}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td>{listing.seller?.name || "—"}</td>
+                <td style={{ fontWeight: 600 }}>
+                  {(listing.price || 0).toLocaleString("vi-VN")}đ
+                </td>
                 <td>
                   <span className={`admin-badge ${statusColor(listing.status)}`}>
                     {statusText(listing.status)}
                   </span>
                 </td>
-                <td>{listing.views}</td>
-                <td>{listing.createdDate}</td>
+                <td>{listing.created_at?.split("T")[0] || "—"}</td>
                 <td>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>
-                      Xem
-                    </button>
-                    {listing.status === "pending" && (
-                      <>
-                        <button 
-                          className="admin-btn admin-btn-success" 
-                          style={{ padding: "6px 10px", fontSize: "12px" }}
-                          onClick={() => handleApprove(listing.id)}
-                        >
-                          Duyệt
-                        </button>
-                        <button 
-                          className="admin-btn admin-btn-danger" 
-                          style={{ padding: "6px 10px", fontSize: "12px" }}
-                          onClick={() => handleReject(listing.id)}
-                        >
-                          Từ Chối
-                        </button>
-                      </>
-                    )}
-                    {listing.status === "flagged" && (
-                      <button 
-                        className="admin-btn admin-btn-danger" 
-                        style={{ padding: "6px 10px", fontSize: "12px" }}
-                        onClick={() => handleReject(listing.id)}
-                      >
-                        Xóa
-                      </button>
-                    )}
-                  </div>
+                  <ActionButtons
+                    listing={listing}
+                    onApprove={handleApprove}
+                    onReject={setRejectTarget}
+                    onFlag={handleFlag}
+                    onRestore={handleRestore}
+                  />
                 </td>
               </tr>
             ))}
@@ -209,7 +345,7 @@ export default function ListingManagement() {
       </div>
 
       <div style={{ marginTop: "16px", color: "#56647e", fontSize: "14px" }}>
-        Hiển thị {filteredListings.length} / {listings.length} listing
+        Hiển thị {listings.length} listing
       </div>
     </div>
   );
