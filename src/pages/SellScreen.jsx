@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { categories } from "../data/siteData";
+import { useCategories } from "../hooks/useCategories";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
 
@@ -35,6 +35,7 @@ const schoolSuggestions = [
 export default function SellScreen() {
    const { user, userData, showToast } = useAuth();
    const navigate = useNavigate();
+   const { categories } = useCategories();
 
    // Khối 1: Cơ bản
    const [images, setImages] = useState([]);
@@ -136,8 +137,8 @@ export default function SellScreen() {
       return Object.keys(newErrors).length === 0;
    };
 
-   const handleSubmit = async (status = 'active') => {
-      if (status === 'active' && !validateForm()) {
+    const handleSubmit = async (status = 'pending') => {
+      if (status === 'pending' && !validateForm()) {
          showToast("Vui lòng điền đầy đủ thông tin bắt buộc.", "error");
          window.scrollTo({ top: 0, behavior: 'smooth' });
          return;
@@ -467,7 +468,7 @@ export default function SellScreen() {
             <button type="button" onClick={() => handleSubmit('draft')} className="px-6 py-3 font-semibold text-teal-700 bg-white border border-teal-200 hover:bg-teal-50 shadow-sm rounded-lg transition-colors text-sm" disabled={loading}>
                Lưu nháp
             </button>
-            <button type="button" onClick={() => handleSubmit('active')} className="vinted-btn-primary sm:w-auto shadow-xl flex items-center justify-center gap-2 py-3 px-8 text-base" disabled={loading}>
+            <button type="button" onClick={() => handleSubmit('pending')} className="vinted-btn-primary sm:w-auto shadow-xl flex items-center justify-center gap-2 py-3 px-8 text-base" disabled={loading}>
                {loading ? (
                   <>
                      <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
