@@ -1,7 +1,9 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "../services/supabase";
 
 const AuthContext = createContext();
+
+const EDU_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.edu\.vn$/i;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -20,6 +22,7 @@ export function AuthProvider({ children }) {
   };
 
   const [userData, setUserData] = useState(null);
+  const oauthInProgress = useRef(false);
 
   useEffect(() => {
     const fetchUserData = async (authUser) => {
@@ -105,9 +108,21 @@ export function AuthProvider({ children }) {
     });
 
     // Lắng nghe thay đổi trạng thái auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+
+      // Nếu user vừa đăng nhập bằng OAuth → kiểm tra email .edu.vn
+      if (session?.user && oauthInProgress.current) {
+        oauthInProgress.current = false;
+        const email = session.user.email || '';
+        if (!EDU_EMAIL_REGEX.test(email)) {
+          await supabase.auth.signOut();
+          showToast('Chỉ sinh viên có email @*.edu.vn mới được phép đăng nhập bằng tài khoản trường.', 'error');
+          return;
+        }
+      }
+
       if (session?.user) ensureUserRecord(session.user);
       else setUserData(null);
       setLoading(false);
@@ -115,6 +130,18 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const signInWithOAuth = async (provider) => {
+    oauthInProgress.current = true;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      oauthInProgress.current = false;
+      showToast(error.message, 'error');
+    }
+  };
 
   const openLoginModal = () => {
     setAuthModalMode("login");
@@ -182,6 +209,8 @@ export function AuthProvider({ children }) {
     updateProfile,
     resetPassword,
     updatePassword,
+    signInWithOAuth,
+    isEduEmail: (email) => EDU_EMAIL_REGEX.test(email),
   };
 
   return (
@@ -190,7 +219,7 @@ export function AuthProvider({ children }) {
       
       {/* Toast Notification */}
       {toast.visible && (
-        <div className={`fixed top-6 right-6 z-[9999] shadow-lg rounded-xl px-5 py-3 border-l-4 bg-white flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${toast.type === 'error' ? 'border-red-500 text-red-700' : 'border-teal-500 text-teal-700'}`}>
+        <div className={`fixed top-20 right-6 z-[9999] shadow-lg rounded-xl px-5 py-3 border-l-4 bg-white flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${toast.type === 'error' ? 'border-red-500 text-red-700' : 'border-teal-500 text-teal-700'}`}>
           {toast.type === "success" ? (
             <svg className="w-6 h-6 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

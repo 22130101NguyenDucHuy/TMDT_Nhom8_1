@@ -46,8 +46,8 @@ const MOCK = {
 // ============================================================================
 function applyPagination(data, page, perPage) {
   const p = page || 1;
-  const pp = perPage || 20;
-  return { data: data.slice((p - 1) * pp, p * pp), total: data.length, page: p, perPage: pp };
+  const pp = perPage || 15;
+  return { data: data.slice((p - 1) * pp, p * pp), total: data.length, page: p, perPage: pp, totalPages: Math.ceil(data.length / pp) };
 }
 
 function formatUserForDisplay(u) {
@@ -74,7 +74,7 @@ export async function getUsers(filters = {}, page = 1, perPage = 20) {
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
-    return { data: (data || []).map(formatUserForDisplay), total: count || 0, page, perPage };
+    return { data: (data || []).map(formatUserForDisplay), total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getUsers fallback:', err?.message);
     let mock = [...MOCK.users];
@@ -171,7 +171,7 @@ export async function getListings(filters = {}, page = 1, perPage = 20) {
       ...b,
       seller: b.seller ? { name: b.seller.name, rating: (b.seller.rating_count || 0) > 0 ? (b.seller.rating_sum / b.seller.rating_count).toFixed(1) : '0.0', response_time: '—' } : { name: 'Người bán', rating: '0.0', response_time: '—' },
     }));
-    return { data: enriched, total: count || 0, page, perPage };
+    return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getListings fallback:', err?.message);
     let mock = [...MOCK.listings];
@@ -243,7 +243,7 @@ export async function getTransactions(filters = {}, page = 1, perPage = 20) {
       buyer_name: t.buyer?.name || '—',
       seller_name: t.seller?.name || '—',
     }));
-    return { data: enriched, total: count || 0, page, perPage };
+    return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getTransactions fallback:', err?.message);
     let mock = [...MOCK.transactions];
@@ -354,7 +354,7 @@ export async function getDisputes(filters = {}, page = 1, perPage = 20) {
       seller_name: d.seller?.name || '—',
       dispute_date: d.created_at?.split('T')[0],
     }));
-    return { data: enriched, total: count || 0, page, perPage };
+    return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getDisputes fallback:', err?.message);
     let mock = [...MOCK.disputes];
@@ -398,7 +398,7 @@ export async function getReports(filters = {}, page = 1, perPage = 20) {
       reporter_name: r.reporter?.name || '—',
       report_date: r.created_at?.split('T')[0],
     }));
-    return { data: enriched, total: count || 0, page, perPage };
+    return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getReports fallback:', err?.message);
     let mock = [...MOCK.reports];
@@ -649,7 +649,7 @@ export async function getComplaints(filters = {}, page = 1, perPage = 20) {
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
-    return { data: (data || []).map(c => ({ ...c, complainant_name: c.complainant?.name, defendant_name: c.defendant?.name })), total: count || 0, page, perPage };
+    return { data: (data || []).map(c => ({ ...c, complainant_name: c.complainant?.name, defendant_name: c.defendant?.name })), total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getComplaints fallback:', err?.message);
     return { data: [], total: 0, page, perPage };
@@ -677,13 +677,26 @@ export async function updateComplaintStatus(complaintId, status, resolutionNote,
 
 export async function getPromotions(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_listing_promotions').select('*, book:book_id(id, title), user:user_id(id, name)', { count: 'exact' });
+    let query = supabase.from('lb_listing_promotions').select('*', { count: 'exact' });
     if (filters.is_active !== undefined) query = query.eq('is_active', filters.is_active);
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
-    return { data: (data || []).map(p => ({ ...p, book_title: p.book?.title, user_name: p.user?.name })), total: count || 0, page, perPage };
+    const enriched = await Promise.all((data || []).map(async (p) => {
+      let book_title = '—';
+      if (p.book_id) {
+        const { data: book } = await supabase.from('lb_books').select('title').eq('id', p.book_id).maybeSingle();
+        if (book) book_title = book.title;
+      }
+      let user_name = '—';
+      if (p.user_id) {
+        const { data: u } = await supabase.from('lb_users').select('name').eq('id', p.user_id).maybeSingle();
+        if (u) user_name = u.name;
+      }
+      return { ...p, book_title, user_name };
+    }));
+    return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getPromotions fallback:', err?.message);
     return { data: [], total: 0, page, perPage };
@@ -730,7 +743,7 @@ export async function getNotifications(userId, filters = {}, page = 1, perPage =
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
-    return { data: data || [], total: count || 0, page, perPage };
+    return { data: data || [], total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getNotifications fallback:', err?.message);
     return { data: [], total: 0, page, perPage };

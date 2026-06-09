@@ -188,8 +188,8 @@ export default function SellScreen() {
 
       setLoading(true);
       try {
-         // 1. Generate unique ID cho bài đăng
-         const bookId = `bk_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 6)}`;
+         // 1. Generate UUID-like ID cho bài đăng
+          const bookId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`;
          const numericPrice = price ? parseInt(price.replace(/,/g, ""), 10) : 0;
          const numericYear = year ? parseInt(year, 10) : null;
 
@@ -202,11 +202,11 @@ export default function SellScreen() {
             const fileName = `${bookId}_${i}.${fileExt}`;
 
             const { error: uploadError } = await supabase.storage
-               .from('books2')
+               .from('books')
                .upload(fileName, file);
             if (uploadError) throw uploadError;
 
-            const { data: urlData } = supabase.storage.from('books2').getPublicUrl(fileName);
+            const { data: urlData } = supabase.storage.from('books').getPublicUrl(fileName);
             uploadedUrls.push(urlData.publicUrl);
          }
 
@@ -232,8 +232,8 @@ export default function SellScreen() {
          if (hasNotes) tags.push("Có Ghi chú tổng hợp");
          if (hasSolutions) tags.push("Có Lời giải chi tiết");
 
-          // 4. Xác định category
-          const dbCategory = category === 'other' ? null : category;
+          // 4. Xác định category - chỉ dùng ID hợp lệ, tránh FK violation
+          const dbCategory = (!category || category === 'other') ? null : category;
 
           // 5. Insert DB
           const { data: insertData, error } = await supabase
@@ -247,8 +247,9 @@ export default function SellScreen() {
                 condition: condition,
                 price: numericPrice,
                 original_price: null,
-                images: uploadedUrls,
-                status: status,
+                 images: uploadedUrls,
+                 image: uploadedUrls[0] || null,
+                 status: status,
                 author: author.trim() || null,
                 publisher: publisher.trim() || null,
                 edition: edition.trim() || null,

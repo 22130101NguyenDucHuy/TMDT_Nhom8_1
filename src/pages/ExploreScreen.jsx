@@ -42,7 +42,7 @@ const normalizeBook = (b) => {
 
   let imgs = [];
   if (Array.isArray(b.images) && b.images.length > 0) {
-    imgs = b.images.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books2/${img}`);
+    imgs = b.images.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${img}`);
   } else {
     const fallbackFile = defaultImageMap[b.id];
     if (fallbackFile) {
@@ -67,10 +67,11 @@ const normalizeBook = (b) => {
 };
 
 export default function ExploreScreen() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [books, setBooks]             = useState([]);
   const [categories, setCategories]   = useState([]);
+  const [categoryCounts, setCategoryCounts] = useState({});
   const [loading, setLoading]         = useState(true);      // lần đầu
   const [loadingMore, setLoadingMore] = useState(false);     // load thêm
   const [hasMore, setHasMore]         = useState(true);
@@ -78,7 +79,7 @@ export default function ExploreScreen() {
 
   // Khởi tạo từ URL params (q=... và danh-muc=...)
   const [searchQuery, setSearchQuery]           = useState(() => searchParams.get("q") || "");
-  const [selectedCategory, setSelectedCategory] = useState(() => searchParams.get("danh-muc") || "all");
+  const selectedCategory                        = searchParams.get("danh-muc") || "all";
   const [selectedSchool, setSelectedSchool]     = useState("all");
   const [selectedPrice, setSelectedPrice]       = useState(0);
   const [sortBy, setSortBy]                     = useState("newest");
@@ -123,9 +124,10 @@ export default function ExploreScreen() {
       setPage(0);
       setHasMore(true);
 
-      const [booksResult, catsResult] = await Promise.all([
+      const [booksResult, catsResult, countResult] = await Promise.all([
         buildQuery(0, PAGE_SIZE - 1),
         supabase.from("lb_categories").select("*").order("order", { ascending: true }),
+        supabase.from("lb_books").select("category").eq("status", "active"),
       ]);
 
       if (booksResult.data) {
@@ -133,6 +135,13 @@ export default function ExploreScreen() {
         setHasMore(booksResult.data.length === PAGE_SIZE);
       }
       if (catsResult.data) setCategories(catsResult.data);
+      if (countResult.data) {
+        const counts = {};
+        for (const b of countResult.data) {
+          if (b.category) counts[b.category] = (counts[b.category] || 0) + 1;
+        }
+        setCategoryCounts(counts);
+      }
       setLoading(false);
     };
     fetchInitial();
@@ -179,12 +188,19 @@ export default function ExploreScreen() {
     s.toLowerCase().includes(schoolQuery.toLowerCase())
   );
 
-  const getCatCount = (catId) => books.filter((b) => b.category === catId).length;
+  const getCatCount = (catId) => categoryCounts[catId] || 0;
 
   const hasFilter = selectedCategory !== "all" || selectedSchool !== "all" || selectedPrice !== 0 || searchQuery.trim() !== "";
 
+  const updateCategory = (catId) => {
+    const next = new URLSearchParams(searchParams);
+    if (catId === "all") next.delete("danh-muc");
+    else next.set("danh-muc", catId);
+    setSearchParams(next);
+  };
+
   const resetAll = () => {
-    setSelectedCategory("all");
+    setSearchParams({});
     setSelectedSchool("all");
     setSelectedPrice(0);
     setSchoolQuery("");
@@ -239,13 +255,13 @@ export default function ExploreScreen() {
             <h3 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wide">Danh mục ngành</h3>
             <ul className="space-y-2">
               <li>
-                <button onClick={() => setSelectedCategory("all")} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all border ${selectedCategory === "all" ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
+                <button onClick={() => updateCategory("all")} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all border ${selectedCategory === "all" ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
                   Tất cả danh mục
                 </button>
               </li>
               {categories.map((cat) => (
                 <li key={cat.id}>
-                  <button onClick={() => setSelectedCategory(selectedCategory === cat.id ? "all" : cat.id)} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-between group border ${selectedCategory === cat.id ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
+                  <button onClick={() => updateCategory(selectedCategory === cat.id ? "all" : cat.id)} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-between group border ${selectedCategory === cat.id ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
                     <span className="flex items-center gap-2">
                       <span>{categoryMeta[cat.id]?.icon || "📚"}</span>
                       {categoryMeta[cat.id]?.label || cat.name}
@@ -307,7 +323,7 @@ export default function ExploreScreen() {
               <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-semibold rounded-full border border-teal-200">
                 <span>{categoryMeta[selectedCategory]?.icon}</span>
                 {categoryMeta[selectedCategory]?.label || selectedCategory}
-                <button onClick={() => setSelectedCategory("all")} className="ml-0.5 hover:text-teal-900">✕</button>
+                <button onClick={() => updateCategory("all")} className="ml-0.5 hover:text-teal-900">✕</button>
               </span>
             )}
             {selectedSchool !== "all" && (

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { formatPrice } from "../../utils/formatters";
+import { getCategoryMeta } from "../../data/categoryMeta";
 
 export default function BookCard({ book }) {
   const imgSrc = book.image || (Array.isArray(book.images) && book.images.length > 0 ? book.images[0] : null);
@@ -7,6 +8,7 @@ export default function BookCard({ book }) {
   const sellerInitial = sellerName.charAt(0).toUpperCase();
   const displayName = sellerName.split(" ").pop();
   const urgency = book.urgent;
+  const cat = book.category ? getCategoryMeta(book.category) : null;
 
   return (
     <Link to={`/sach/${book.id}`} className="group block">
@@ -36,6 +38,13 @@ export default function BookCard({ book }) {
             {displayName}
           </span>
         </div>
+        {cat && (
+          <div className="absolute top-2 right-2">
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cat.color}`}>
+              {cat.icon} {cat.label}
+            </span>
+          </div>
+        )}
       </div>
 
       <div>

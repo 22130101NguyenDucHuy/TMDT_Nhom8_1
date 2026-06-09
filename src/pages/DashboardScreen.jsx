@@ -6,6 +6,7 @@ import { formatPrice } from "../utils/formatters";
 
 const TABS = [
   { key: "active", label: "Đang đăng" },
+  { key: "pending", label: "Chờ duyệt" },
   { key: "draft",  label: "Nháp"      },
   { key: "sold",   label: "Đã bán"    },
 ];
@@ -21,6 +22,7 @@ const conditionMap = {
 const statusBadge = (status) => {
   const map = {
     active: "bg-green-100 text-green-700",
+    pending: "bg-yellow-100 text-yellow-700",
     draft:  "bg-slate-100 text-slate-500",
     sold:   "bg-blue-100 text-blue-700",
   };
@@ -166,6 +168,7 @@ export default function DashboardScreen() {
                 </svg>
                 <p className="font-semibold text-sm">
                   {activeTab === "active" && "Bạn chưa có tin đăng nào."}
+                  {activeTab === "pending" && "Không có tin nào chờ duyệt."}
                   {activeTab === "draft"  && "Không có bản nháp nào."}
                   {activeTab === "sold"   && "Chưa có giao dịch nào hoàn tất."}
                 </p>
@@ -196,7 +199,7 @@ export default function DashboardScreen() {
                     <p className="font-semibold text-slate-900 text-sm truncate">{book.title}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusBadge(book.status)}`}>
-                        {book.status === "active" ? "Đang bán" : book.status === "draft" ? "Nháp" : "Đã bán"}
+                        {book.status === "active" ? "Đang bán" : book.status === "pending" ? "Chờ duyệt" : book.status === "draft" ? "Nháp" : "Đã bán"}
                       </span>
                       <span className="text-xs text-slate-400">
                         {conditionMap[book.condition] || book.condition}

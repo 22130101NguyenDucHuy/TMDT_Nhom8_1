@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, Navigate, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { formatPrice } from "../utils/formatters";
+import { getCategoryMeta } from "../data/categoryMeta";
 import BookCard from "../components/common/BookCard";
 import { useAuth } from "../contexts/AuthContext";
 import { useFavorite } from "../hooks/useFavorite";
@@ -72,6 +73,7 @@ export default function BookDetailScreen() {
   const [offerValue, setOfferValue] = useState("");
   const [showOfferBox, setShowOfferBox] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const { isFavorite, loading: favLoading, toggle: toggleFavorite } = useFavorite(bookId, user);
 
   useEffect(() => {
@@ -98,7 +100,7 @@ export default function BookDetailScreen() {
 
         const resolveImgs = (id, imagesList) => {
           if (Array.isArray(imagesList) && imagesList.length > 0) {
-            return imagesList.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books2/${img}`);
+            return imagesList.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${img}`);
           } else {
             const fallbackFile = defaultImageMap[id];
             if (fallbackFile) {
@@ -198,6 +200,36 @@ export default function BookDetailScreen() {
     });
   };
 
+  const [reportReason, setReportReason] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
+  const [submittingReport, setSubmittingReport] = useState(false);
+
+  const handleSubmitReport = async () => {
+    if (!reportReason) {
+      showToast("Vui lòng chọn lý do báo cáo", "error");
+      return;
+    }
+    setSubmittingReport(true);
+    try {
+      await supabase.from("lb_reports").insert([{
+        reporter_id: userData.id,
+        target_type: "listing",
+        target_id: book.id,
+        report_type: reportReason,
+        description: reportDescription,
+        status: "open",
+      }]);
+      showToast("Cảm ơn bạn đã báo cáo! Chúng tôi sẽ xem xét trong 24h.", "success");
+      setShowReportModal(false);
+      setReportReason("");
+      setReportDescription("");
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra", "error");
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -263,6 +295,7 @@ export default function BookDetailScreen() {
               {book.publisher && <div><span className="text-slate-400 block mb-0.5">Nhà xuất bản</span><span className="font-semibold text-slate-800">{book.publisher}</span></div>}
               {book.year && <div><span className="text-slate-400 block mb-0.5">Năm xuất bản</span><span className="font-semibold text-slate-800">{book.year}</span></div>}
               <div><span className="text-slate-400 block mb-0.5">Tình trạng</span><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${conditionColor[book.condition] || "bg-slate-100 text-slate-600"}`}>{condLabel}</span></div>
+              {book.category && <div className="col-span-2"><span className="text-slate-400 block mb-0.5">Danh mục</span><span className="font-semibold text-slate-800">{getCategoryMeta(book.category).icon} {getCategoryMeta(book.category).label}</span></div>}
               {book.school && <div className="col-span-2"><span className="text-slate-400 block mb-0.5">Trường sử dụng</span><span className="font-semibold text-slate-800">{book.school}</span></div>}
             </div>
           </div>
@@ -279,6 +312,10 @@ export default function BookDetailScreen() {
             </button>
             <button onClick={() => { if (!requireAuth()) return; setShowOfferBox(!showOfferBox); }} className="w-full py-3 border border-teal-700 text-teal-700 hover:bg-teal-50 font-bold rounded-lg transition-colors text-sm">
               Trả giá
+            </button>
+            <button onClick={() => { if (!requireAuth()) return; setShowReportModal(true); }} className="text-xs text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center gap-1 py-1">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>
+              Báo cáo
             </button>
             {user?.id !== book?.seller_id && (
               <button onClick={handleContactSeller} className="w-full py-3 border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold rounded-lg transition-colors text-sm">
@@ -330,6 +367,42 @@ export default function BookDetailScreen() {
           )}
         </div>
       </div>
+
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { if (!submittingReport) setShowReportModal(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { if (!submittingReport) setShowReportModal(false); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <h3 className="text-lg font-bold text-slate-900 mb-5">Báo cáo tin đăng</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Lý do báo cáo</label>
+                <select value={reportReason} onChange={(e) => setReportReason(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-teal-500 bg-white">
+                  <option value="">-- Chọn lý do --</option>
+                  <option value="Spam">Spam</option>
+                  <option value="Sách giả/Sai mô tả">Sách giả/Sai mô tả</option>
+                  <option value="Người bán lừa đảo">Người bán lừa đảo</option>
+                  <option value="Nội dung không phù hợp">Nội dung không phù hợp</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mô tả chi tiết</label>
+                <textarea value={reportDescription} onChange={(e) => setReportDescription(e.target.value)} rows={4} placeholder="Vui lòng mô tả chi tiết vấn đề..." className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-teal-500 resize-none" />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => { if (!submittingReport) setShowReportModal(false); }} className="flex-1 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold rounded-lg text-sm transition-colors">
+                  Hủy
+                </button>
+                <button onClick={handleSubmitReport} disabled={submittingReport} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-semibold rounded-lg text-sm transition-colors">
+                  {submittingReport ? "Đang gửi..." : "Gửi báo cáo"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCheckoutModal && book && (
         <QuickCheckoutModal book={book} onClose={() => setShowCheckoutModal(false)} />

@@ -3,18 +3,17 @@ import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats } fr
 import { RevenueChart, CategoryDistributionChart, UserGrowthChart } from "./AdminCharts";
 
 const CATEGORY_LABELS = {
-  economics: "Kinh Tế", law: "Luật", engineering: "Kỹ Thuật",
-  language: "Ngoại Ngữ", agriculture: "Nông Nghiệp", sociology: "Xã Hội Học",
-  "cong-nghe-thong-tin": "CNTT", "cat-khtn": "KHTN",
-  "toan-hoc": "Toán", "y-hoc": "Y Học", "ngoai-ngu": "Ngoại Ngữ",
-  "kinh-te": "Kinh Tế", "ky-thuat": "Kỹ Thuật", "luat": "Luật",
-  "nong-nghiep": "Nông Nghiệp", "xa-hoi-hoc": "Xã Hội Học",
+  "cong-nghe-thong-tin": "CNTT",
+  "khoa-hoc-tu-nhien": "KHTN",
+  "kinh-te": "Kinh Tế",
+  "ky-thuat": "Kỹ Thuật",
+  "luat": "Luật",
+  "ngoai-ngu": "Ngoại Ngữ",
+  "nong-nghiep": "Nông Nghiệp",
+  "toan-hoc": "Toán",
+  "xa-hoi-hoc": "Xã Hội Học",
+  "y-hoc": "Y Học",
 };
-
-const CATEGORY_COLORS = [
-  "#0f766e","#14b8a6","#06b6d4","#3b82f6","#8b5cf6",
-  "#f59e0b","#ef4444","#10b981","#64748b","#f97316",
-];
 
 
 function formatCurrencyShort(value) {
@@ -36,27 +35,31 @@ export default function AdminDashboard() {
   const [analyticsData, setAnalyticsData] = useState([]);
   const [categoryStats, setCategoryStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const [txPage, setTxPage] = useState(1);
+  const [txTotal, setTxTotal] = useState(0);
 
   // Date filter
   const [startDate, setStartDate] = useState(daysAgo(30));
   const [endDate, setEndDate] = useState(today());
 
-  const fetchAll = async (sd, ed) => {
+  const fetchAll = async (sd, ed, tPage) => {
     setLoading(true);
     const [statsData, txnData, analytics, catStats] = await Promise.all([
       getDashboardStats(),
-      getTransactions({}, 1, 10),
+      getTransactions({}, tPage || txPage, 7),
       getAnalytics({ startDate: sd, endDate: ed }),
       getCategoryStats(),
     ]);
     setStats(statsData || { totalUsers: 0, totalListings: 0, totalTransactions: 0, totalDisputes: 0, totalReports: 0, totalPremium: 0 });
     setRecentTxns(txnData.data || []);
+    setTxTotal(txnData.total || 0);
     setAnalyticsData(analytics || []);
     setCategoryStats(catStats || {});
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(startDate, endDate); }, [startDate, endDate]);
+  useEffect(() => { fetchAll(startDate, endDate, 1); }, [startDate, endDate]);
+  useEffect(() => { if (!loading) fetchAll(startDate, endDate, txPage); }, [txPage]);
 
   // Quick date range presets
   const setRange = (days) => {
@@ -69,6 +72,8 @@ export default function AdminDashboard() {
     analyticsData.reduce((sum, a) => sum + (Number(a.total_revenue) || Number(a.revenue) || 0), 0),
   [analyticsData]);
 
+  const PIE_COLORS = ["#0f766e","#14b8a6","#8b5cf6","#f59e0b","#ef4444","#3b82f6","#06b6d4","#10b981","#f97316","#ec4899"];
+
   // Category distribution — từ lb_books thực tế
   const categoryData = useMemo(() =>
     Object.entries(categoryStats)
@@ -76,17 +81,23 @@ export default function AdminDashboard() {
       .map(([key, value], i) => ({
         name: CATEGORY_LABELS[key] || key,
         value,
-        color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+        color: PIE_COLORS[i % PIE_COLORS.length],
       }))
       .sort((a, b) => b.value - a.value),
   [categoryStats]);
+
+  const formatLabel = (d) => {
+    if (!d) return "—";
+    const s = String(d);
+    return s.slice(8, 10) + "-" + s.slice(5, 7);
+  };
 
   // Revenue chart — từ analytics theo thời gian
   const revenueData = useMemo(() =>
     analyticsData
       .filter(a => !a.metric_type || a.metric_type === "overview")
       .map(a => ({
-        label: a.date ? String(a.date).slice(5, 10) : "—",
+        label: formatLabel(a.date),
         revenue: Number(a.total_revenue) || Number(a.revenue) || 0,
       }))
       .filter(a => a.label !== "—"),
@@ -97,7 +108,7 @@ export default function AdminDashboard() {
     analyticsData
       .filter(a => !a.metric_type || a.metric_type === "overview")
       .map(a => ({
-        label: a.date ? String(a.date).slice(5, 10) : "—",
+        label: formatLabel(a.date),
         users: Number(a.new_users) || 0,
       }))
       .filter(a => a.label !== "—"),
@@ -202,9 +213,11 @@ export default function AdminDashboard() {
 
       {/* Recent transactions */}
       <div style={{ marginTop: "32px" }}>
-        <h2 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: 700, color: "#172033" }}>
-          Giao Dịch Gần Đây
-        </h2>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 700, color: "#172033" }}>
+            Giao Dịch Gần Đây (7 ngày)
+          </h2>
+        </div>
         <div className="admin-table-wrapper">
           <table className="admin-table">
             <thead>
@@ -240,6 +253,17 @@ export default function AdminDashboard() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div style={{ marginTop: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+          <button disabled={txPage <= 1} onClick={() => setTxPage(p => p - 1)}
+            style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600, cursor: txPage <= 1 ? "not-allowed" : "pointer", opacity: txPage <= 1 ? 0.5 : 1 }}>
+            ← Trước
+          </button>
+          <span style={{ fontSize: "13px", color: "#56647e" }}>Trang {txPage} / {Math.max(1, Math.ceil(txTotal / 7))}</span>
+          <button disabled={txPage >= Math.ceil(txTotal / 7)} onClick={() => setTxPage(p => p + 1)}
+            style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600, cursor: txPage >= Math.ceil(txTotal / 7) ? "not-allowed" : "pointer", opacity: txPage >= Math.ceil(txTotal / 7) ? 0.5 : 1 }}>
+            Sau →
+          </button>
         </div>
       </div>
 
