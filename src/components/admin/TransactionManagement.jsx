@@ -23,6 +23,8 @@ export default function TransactionManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const loadTransactions = async () => {
     try {
@@ -31,8 +33,9 @@ export default function TransactionManagement() {
       const filters = {};
       if (filterStatus !== "all") filters.status = filterStatus;
       if (searchTerm) filters.search = searchTerm;
-      const result = await getTransactions(filters);
+      const result = await getTransactions(filters, page, 15);
       setTxList(result.data || []);
+      setTotalPages(result.totalPages || 1);
     } catch (err) {
       console.error("Failed to load transactions:", err);
       setError("Không thể tải danh sách giao dịch");
@@ -44,6 +47,7 @@ export default function TransactionManagement() {
   useEffect(() => {
     loadTransactions();
   }, [filterStatus, searchTerm]);
+  useEffect(() => { loadTransactions(); }, [page]);
 
   const statusColor = (status) => {
     const colors = {
@@ -160,7 +164,7 @@ export default function TransactionManagement() {
                 <td><strong>{tx.book || "—"}</strong></td>
                 <td>{tx.buyer_name || "—"}</td>
                 <td>{tx.seller_name || "—"}</td>
-                <td style={{ fontWeight: 600 }}>{tx.amount ? `${(tx.amount / 1000).toFixed(0)}K` : "—"}</td>
+                <td style={{ fontWeight: 600 }}>{tx.amount ? `${(Number(tx.amount) / 1000).toFixed(0)}K` : "—"}</td>
                 <td>
                   <span className={`admin-badge ${statusColor(tx.status)}`}>
                     {STATUS_MAP[tx.status] || tx.status}
@@ -183,6 +187,18 @@ export default function TransactionManagement() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+        <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          ← Trước
+        </button>
+        <span style={{ fontSize: "13px", color: "#56647e" }}>Trang {page} / {totalPages}</span>
+        <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          Sau →
+        </button>
       </div>
 
       <div style={{ marginTop: "16px", color: "#56647e", fontSize: "14px" }}>

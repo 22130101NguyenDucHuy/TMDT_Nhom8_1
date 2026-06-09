@@ -31,7 +31,7 @@ export function RevenueChart({ data, title = "Doanh Thu Theo Thời Gian", xKey 
             <YAxis stroke="#9a9a9a" />
             <Tooltip
               contentStyle={{ background: "#fff", border: "1px solid rgba(92, 109, 140, 0.14)", borderRadius: "8px" }}
-              formatter={(value) => `${(value / 1000000).toFixed(1)}M đ`}
+              formatter={(value) => `${(value / 1000).toFixed(0)}K đ`}
             />
             <Line type="monotone" dataKey="revenue" stroke="#06b6d4" strokeWidth={3} dot={{ fill: "#06b6d4", r: 5 }} />
           </LineChart>
@@ -42,6 +42,8 @@ export function RevenueChart({ data, title = "Doanh Thu Theo Thời Gian", xKey 
     </div>
   );
 }
+
+const PIE_COLORS = ["#0f766e","#14b8a6","#8b5cf6","#f59e0b","#ef4444","#3b82f6","#06b6d4","#10b981","#f97316","#ec4899"];
 
 export function CategoryDistributionChart({ data }) {
   return (
@@ -55,17 +57,17 @@ export function CategoryDistributionChart({ data }) {
               cx="50%"
               cy="50%"
               labelLine={true}
-              label={({ name, value }) => `${name}: ${value}`}
+              label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
               outerRadius={100}
               fill="#8884d8"
               dataKey="value"
             >
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
+                <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip formatter={(value) => `${value} listing`} />
-            <Legend />
+            <Tooltip formatter={(value, _, props) => [`${value} cuốn`, props.payload.name]} />
+            <Legend formatter={(value) => value} />
           </PieChart>
         </ResponsiveContainer>
       ) : (
@@ -89,7 +91,13 @@ export function UserGrowthChart({ data, title = "Tăng Trưởng Người Dùng"
               contentStyle={{ background: "#fff", border: "1px solid rgba(92, 109, 140, 0.14)", borderRadius: "8px" }}
               formatter={(value) => `${value} người`}
             />
-            <Bar dataKey="users" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+            <defs>
+              <linearGradient id="userBarGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#8b5cf6" />
+                <stop offset="100%" stopColor="#6366f1" />
+              </linearGradient>
+            </defs>
+            <Bar dataKey="users" fill="url(#userBarGrad)" radius={[8, 8, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       ) : (

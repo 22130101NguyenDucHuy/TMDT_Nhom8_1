@@ -1,13 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import BrandLogo from "../common/BrandLogo";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../services/supabase";
 
 export default function TopNav() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [showCatDropdown, setShowCatDropdown] = useState(false);
   const { user, userData, openLoginModal, openRegisterModal, signOut } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.from("lb_categories").select("id, name").order("order", { ascending: true }).then(({ data }) => {
+      if (data) setCategories(data);
+    }).catch(() => {});
+  }, []);
+
+  const VISIBLE_COUNT = 5;
+  const visibleCats = categories.slice(0, VISIBLE_COUNT);
+  const hiddenCats = categories.slice(VISIBLE_COUNT);
 
   const handleSearch = (e) => {
     if (e.key === "Enter" && searchQuery.trim()) {
@@ -108,6 +121,10 @@ export default function TopNav() {
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                           Yêu cầu sách
                         </Link>
+                        <Link to="/yeu-cau-cua-toi" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 text-slate-700 text-sm font-medium">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                          Yêu cầu của tôi
+                        </Link>
                         {userData?.role === 'admin' && (
                           <>
                             <div className="border-t border-slate-100 my-1" />
@@ -154,7 +171,7 @@ export default function TopNav() {
         </div>
 
         {/* --- Hàng dưới: Danh mục điều hướng --- */}
-        <div className="hidden md:flex items-center gap-1 py-1 border-t border-slate-100 overflow-x-auto">
+        <div className="hidden md:flex items-center gap-1 py-1 border-t border-slate-100">
           <NavLink
             to="/"
             end
@@ -172,14 +189,46 @@ export default function TopNav() {
           >
             Khám phá tài liệu
           </NavLink>
-          {["Kinh tế", "Kỹ thuật", "Ngoại ngữ", "Luật", "Y dược", "Nông nghiệp"].map((cat) => (
+
+          <span className="mx-1 text-slate-300 select-none">|</span>
+
+          {visibleCats.map((cat) => (
             <button
-              key={cat}
+              key={cat.id}
+              onClick={() => navigate(`/kham-pha?danh-muc=${cat.id}`)}
               className="px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap text-slate-600 hover:text-teal-700 hover:bg-slate-50 transition-colors"
             >
-              {cat}
+              {cat.name}
             </button>
           ))}
+
+          {hiddenCats.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowCatDropdown(!showCatDropdown)}
+                className="px-2 py-1.5 text-sm font-medium rounded-md text-slate-500 hover:text-teal-700 hover:bg-slate-50 transition-colors"
+                title="Xem thêm danh mục"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+              </button>
+              {showCatDropdown && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowCatDropdown(false)} />
+                  <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-lg py-2 z-20 overflow-hidden">
+                    {hiddenCats.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => { setShowCatDropdown(false); navigate(`/kham-pha?danh-muc=${cat.id}`); }}
+                        className="block w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-teal-700 transition-colors"
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>

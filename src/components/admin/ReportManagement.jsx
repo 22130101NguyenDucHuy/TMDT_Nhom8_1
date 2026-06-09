@@ -5,32 +5,32 @@ export default function ReportManagement() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Load reports from Supabase
-  useEffect(() => {
-    const loadReports = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await getReports();
-        setReports(result.data || []);
-      } catch (err) {
-        console.error("Failed to load reports:", err);
-        setError("Không thể tải danh sách báo cáo");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadReports = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await getReports({}, page, 15);
+      setReports(result.data || []);
+      setTotalPages(result.totalPages || 1);
+    } catch (err) {
+      console.error("Failed to load reports:", err);
+      setError("Không thể tải danh sách báo cáo");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    loadReports();
-  }, []);
+  useEffect(() => { loadReports(); }, []);
+  useEffect(() => { loadReports(); }, [page]);
 
   const handleStatusUpdate = async (id, newStatus) => {
     try {
       await updateReportStatus(id, newStatus);
-      // Refresh reports
-      const result = await getReports();
-      setReports(result.data || []);
+      loadReports();
     } catch (err) {
       console.error("Failed to update report:", err);
       setError("Không thể cập nhật báo cáo");
@@ -127,6 +127,18 @@ export default function ReportManagement() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+        <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          ← Trước
+        </button>
+        <span style={{ fontSize: "13px", color: "#56647e" }}>Trang {page} / {totalPages}</span>
+        <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          Sau →
+        </button>
       </div>
     </div>
   );

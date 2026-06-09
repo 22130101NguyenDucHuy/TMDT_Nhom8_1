@@ -20,6 +20,7 @@ const DashboardScreen        = lazy(() => import("../../pages/DashboardScreen"))
 const ProfileScreen          = lazy(() => import("../../pages/ProfileScreen"));
 const FavoritesScreen        = lazy(() => import("../../pages/FavoritesScreen"));
 const BookRequestScreen      = lazy(() => import("../../pages/BookRequestScreen"));
+const MyBookRequestsScreen   = lazy(() => import("../../pages/MyBookRequestsScreen"));
 
 // ── Fallback spinner dùng chung ────────────────────────────────────────────
 function PageLoader() {
@@ -76,6 +77,7 @@ export default function AppShell() {
             <Route element={<FavoritesScreen />}          path="/yeu-thich" />
             <Route element={<DashboardScreen />}          path="/quan-ly" />
             <Route element={<BookRequestScreen />}        path="/yeu-cau-sach" />
+            <Route element={<MyBookRequestsScreen />}    path="/yeu-cau-cua-toi" />
 
             {/* Redirects */}
             <Route element={<Navigate replace to="/my-transactions" />} path="/giao-dich" />

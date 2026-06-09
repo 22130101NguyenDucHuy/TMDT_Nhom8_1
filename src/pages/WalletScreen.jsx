@@ -19,6 +19,15 @@ export default function WalletScreen() {
   const [accountNumber, setAccountNumber] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("chuyen_khoan");
+  const [showPaymentGateway, setShowPaymentGateway] = useState(false);
+
+  const banks = [
+    "Vietcombank", "Techcombank", "ACB", "MB Bank", "BIDV", "VietinBank",
+    "VPBank", "TPBank", "Sacombank", "SHB", "HDBank", "VIB", "MSB",
+    "SeABank", "OCB", "Nam A Bank", "PVcomBank", "PG Bank", "Saigonbank",
+    "VietBank", "BaoViet Bank", "KienLong Bank", "LienVietPostBank",
+  ];
 
   useEffect(() => {
     if (!userData) {
@@ -55,11 +64,13 @@ export default function WalletScreen() {
       showToast("Vui lòng nhập số tiền hợp lệ", "error");
       return;
     }
+    setShowDeposit(false);
+    setShowPaymentGateway(true);
+    await new Promise(r => setTimeout(r, 2000));
     setSubmitting(true);
     try {
       await depositWallet(userData.id, amount);
       showToast(`Nạp thành công ${formatPrice(amount)} vào ví!`, "success");
-      setShowDeposit(false);
       setDepositAmount("");
       const { data: w } = await supabase.from("lb_wallets").select("*").eq("user_id", userData.id).maybeSingle();
       setWallet(w);
@@ -67,6 +78,8 @@ export default function WalletScreen() {
       showToast(err.message || "Nạp tiền thất bại", "error");
     } finally {
       setSubmitting(false);
+      setShowPaymentGateway(false);
+      setPaymentMethod("chuyen_khoan");
     }
   };
 
@@ -252,6 +265,22 @@ export default function WalletScreen() {
                 </button>
               ))}
             </div>
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-slate-700 mb-2">Chọn phương thức thanh toán</p>
+              <div className="space-y-2">
+                {[
+                  { value: "chuyen_khoan", label: "Chuyển khoản ngân hàng" },
+                  { value: "the_tin_dung", label: "Thẻ tín dụng/ghi nợ" },
+                  { value: "momo", label: "Ví Momo" },
+                  { value: "vietqr", label: "VietQR" },
+                ].map(m => (
+                  <label key={m.value} className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:border-teal-500 hover:bg-teal-50 transition-colors cursor-pointer has-[:checked]:border-teal-600 has-[:checked]:bg-teal-50">
+                    <input type="radio" name="paymentMethod" value={m.value} checked={paymentMethod === m.value} onChange={() => setPaymentMethod(m.value)} className="accent-teal-700" />
+                    <span className="text-sm font-medium text-slate-800">{m.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <button
               onClick={handleDeposit}
               disabled={submitting}
@@ -259,6 +288,16 @@ export default function WalletScreen() {
             >
               {submitting ? "Đang xử lý..." : "Xác nhận nạp tiền"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {showPaymentGateway && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-sm mx-4 shadow-xl text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-700 mx-auto mb-4" />
+            <p className="text-lg font-bold text-slate-900 mb-2">Đang chuyển hướng đến cổng thanh toán...</p>
+            <p className="text-sm text-slate-500">Vui lòng không tắt trình duyệt</p>
           </div>
         </div>
       )}
@@ -286,7 +325,10 @@ export default function WalletScreen() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Ngân hàng thụ hưởng</label>
-                <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} className="vinted-input" placeholder="VD: Vietcombank" />
+                <select value={bankName} onChange={e => setBankName(e.target.value)} className="vinted-input">
+                  <option value="">-- Chọn ngân hàng --</option>
+                  {banks.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Số tài khoản</label>

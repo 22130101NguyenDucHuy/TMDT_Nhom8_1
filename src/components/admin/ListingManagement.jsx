@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getListings, updateListingStatus } from "../../services/admin";
+import { getListings, updateListingStatus, deleteListing } from "../../services/admin";
 
 // ── Modal từ chối ─────────────────────────────────────────────────────────────
 function RejectModal({ listing, onConfirm, onCancel }) {
@@ -50,8 +50,8 @@ function RejectModal({ listing, onConfirm, onCancel }) {
   );
 }
 
-// ── Action buttons theo trạng thái ───────────────────────────────────────────
-function ActionButtons({ listing, onApprove, onReject, onFlag, onRestore }) {
+ // ── Action buttons theo trạng thái ───────────────────────────────────────────
+function ActionButtons({ listing, onApprove, onReject, onFlag, onRestore, onDelete }) {
   // Ngăn click button lan lên row (tránh mở tab mới khi nhấn action)
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
 
@@ -113,7 +113,31 @@ function ActionButtons({ listing, onApprove, onReject, onFlag, onRestore }) {
         </>
       )}
 
-      {/* rejected / sold / draft → không có action */}
+      {/* rejected → Khôi phục (đưa lại về pending để xét duyệt) */}
+      {listing.status === "rejected" && (
+        <button
+          className="admin-btn admin-btn-success"
+          style={{ padding: "5px 10px", fontSize: "12px" }}
+          onClick={stop(() => onRestore(listing.id))}
+          title="Khôi phục — chuyển về pending để duyệt lại"
+        >
+          Khôi phục
+        </button>
+      )}
+
+      {/* draft → Xóa */}
+      {listing.status === "draft" && (
+        <button
+          className="admin-btn admin-btn-danger"
+          style={{ padding: "5px 10px", fontSize: "12px" }}
+          onClick={stop(() => onDelete(listing.id))}
+          title="Xóa bài nháp"
+        >
+          Xóa
+        </button>
+      )}
+
+      {/* sold → không có action */}
     </div>
   );
 }
@@ -126,6 +150,8 @@ export default function ListingManagement() {
   const [successMsg, setSuccessMsg] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [rejectTarget, setRejectTarget] = useState(null); // listing đang chờ từ chối
 
   const showSuccess = (msg) => {
@@ -140,8 +166,9 @@ export default function ListingManagement() {
       const filters = {};
       if (filterStatus !== "all") filters.status = filterStatus;
       if (searchTerm) filters.search = searchTerm;
-      const result = await getListings(filters);
+      const result = await getListings(filters, page, 15);
       setListings(result.data || []);
+      setTotalPages(result.totalPages || 1);
     } catch (err) {
       console.error("Failed to load listings:", err);
       setError("Không thể tải danh sách");
@@ -151,6 +178,7 @@ export default function ListingManagement() {
   };
 
   useEffect(() => { loadListings(); }, [filterStatus, searchTerm]);
+  useEffect(() => { loadListings(); }, [page]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -187,11 +215,21 @@ export default function ListingManagement() {
 
   const handleRestore = async (id) => {
     try {
-      await updateListingStatus(id, "active");
-      showSuccess("Đã khôi phục bài đăng");
+      await updateListingStatus(id, "pending");
+      showSuccess("Đã khôi phục bài đăng, chuyển về chờ duyệt");
       loadListings();
     } catch {
       setError("Không thể khôi phục bài đăng");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteListing(id);
+      showSuccess("Đã xóa bài đăng");
+      loadListings();
+    } catch {
+      setError("Không thể xóa bài đăng");
     }
   };
 
@@ -258,13 +296,13 @@ export default function ListingManagement() {
             className="admin-filter-input with-search"
             placeholder="Tìm theo tên sách..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
           />
         </div>
         <select
           className="admin-filter-select"
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
+          onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
         >
           <option value="all">Tất Cả Trạng Thái</option>
           <option value="pending">Chờ Duyệt</option>
@@ -336,12 +374,25 @@ export default function ListingManagement() {
                     onReject={setRejectTarget}
                     onFlag={handleFlag}
                     onRestore={handleRestore}
+                    onDelete={handleDelete}
                   />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+        <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          ← Trước
+        </button>
+        <span style={{ fontSize: "13px", color: "#56647e" }}>Trang {page} / {totalPages}</span>
+        <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          Sau →
+        </button>
       </div>
 
       <div style={{ marginTop: "16px", color: "#56647e", fontSize: "14px" }}>
