@@ -120,7 +120,9 @@ export default function DisputeManagement() {
                 <td><strong>{dispute.title}</strong></td>
                 <td>{dispute.buyer_name}</td>
                 <td>{dispute.seller_name}</td>
-                <td style={{ fontWeight: 600, color: "#d94c24" }}>{dispute.amount}</td>
+                <td style={{ fontWeight: 600, color: "#d94c24" }}>
+                  {((dispute.amount_involved ?? dispute.amount) || 0).toLocaleString("vi-VN")}đ
+                </td>
                 <td>
                   <span className={`admin-badge ${statusColor(dispute.status)}`}>
                     {statusText(dispute.status)}

@@ -45,57 +45,71 @@ export function AuthProvider({ children }) {
 
     const ensureUserRecord = async (authUser) => {
       if (!authUser) return;
+      
+      let activeUser = null;
       // Kiểm tra đã có record chưa
       const { data: existing } = await supabase
         .from('lb_users')
         .select('*')
         .eq('id', authUser.id)
         .maybeSingle();
+      
       if (existing) {
-        setUserData(existing);
-        return;
+        activeUser = existing;
+      } else {
+        // Chưa có → tạo mới (lb_users.id = auth.users.id)
+        const email = authUser.email || '';
+        const name = authUser.user_metadata?.full_name || email.split('@')[0] || 'Người dùng';
+        const { data: newUser, error } = await supabase
+          .from('lb_users')
+          .insert([{ id: authUser.id, name, email }])
+          .select()
+          .single();
+        
+        if (!error && newUser) {
+          activeUser = newUser;
+        } else {
+          // Thử lấy lại nếu trùng khóa (trigger tạo trước)
+          const { data: byId } = await supabase
+            .from('lb_users')
+            .select('*')
+            .eq('id', authUser.id)
+            .maybeSingle();
+          if (byId) {
+            activeUser = byId;
+          } else {
+            const { data: byEmail } = await supabase
+              .from('lb_users')
+              .select('*')
+              .eq('email', email)
+              .maybeSingle();
+            activeUser = byEmail;
+          }
+        }
       }
-      // Chưa có → tạo mới (lb_users.id = auth.users.id)
-      const email = authUser.email || '';
-      const name = authUser.user_metadata?.full_name || email.split('@')[0] || 'Người dùng';
-      const { data: newUser, error } = await supabase
-        .from('lb_users')
-        .insert([{ id: authUser.id, name, email }])
-        .select()
-        .single();
-      if (error) {
-        console.warn('create user record error:', error);
-        // Nếu error (RLS violation hoặc email trùng), thử fetch lại
-        // 1. Fetch by id (có thể user đã được tạo bởi trigger/policy)
-        const { data: byId } = await supabase
-          .from('lb_users')
-          .select('*')
-          .eq('id', authUser.id)
+
+      if (activeUser) {
+        setUserData(activeUser);
+        
+        // Kiểm tra và tự động tạo ví nếu chưa có
+        const { data: wallet, error: wErr } = await supabase
+          .from('lb_wallets')
+          .select('id')
+          .eq('user_id', activeUser.id)
           .maybeSingle();
-        if (byId) {
-          setUserData(byId);
-          return;
+        
+        if (!wErr && !wallet) {
+          console.log('[AuthContext] Wallet not found. Creating wallet...');
+          await supabase
+            .from('lb_wallets')
+            .insert([{ user_id: activeUser.id, balance: 0 }])
+            .maybeSingle();
         }
-        // 2. Fetch by email (fallback)
-        const { data: byEmail } = await supabase
-          .from('lb_users')
-          .select('*')
-          .eq('email', email)
-          .maybeSingle();
-        if (byEmail) {
-          setUserData(byEmail);
-          return;
-        }
-        // 3. Nếu vẫn không có, log error nhưng đừng crash
+      } else {
         console.error('Could not find or create user record:', {
           authId: authUser.id,
-          email: email,
-          error: error
+          email: authUser.email
         });
-      } else if (newUser) {
-        setUserData(newUser);
-        // Tạo ví tự động
-        await supabase.from('lb_wallets').insert([{ user_id: newUser.id, balance: 0 }]).maybeSingle();
       }
     };
 

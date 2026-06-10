@@ -77,7 +77,7 @@ export default function ReportManagement() {
         <div className="admin-stat-card">
           <p className="admin-stat-label">Chờ Xử Lý</p>
           <p className="admin-stat-value" style={{ color: "#f57c00" }}>
-            {reports.filter(r => r.status === "pending").length}
+            {reports.filter(r => r.status === "pending" || r.status === "open").length}
           </p>
         </div>
       </div>
@@ -100,10 +100,10 @@ export default function ReportManagement() {
               <tr key={report.id}>
                 <td><strong>{report.report_type}</strong></td>
                 <td>{report.reporter_name}</td>
-                <td>{report.target}</td>
+                <td>{report.target_type && report.target_id ? `${report.target_type === 'user' ? 'Người dùng' : 'Tin đăng'}: ${report.target_id}` : (report.target || '—')}</td>
                 <td>
-                  <span className={`admin-badge ${report.status === "pending" ? "admin-badge-warning" : "admin-badge-success"}`}>
-                    {report.status === "pending" ? "Chờ Xử Lý" : "Đã Xem Xét"}
+                  <span className={`admin-badge ${(report.status === "pending" || report.status === "open") ? "admin-badge-warning" : "admin-badge-success"}`}>
+                    {(report.status === "pending" || report.status === "open") ? "Chờ Xử Lý" : "Đã Xem Xét"}
                   </span>
                 </td>
                 <td>{report.report_date}</td>
@@ -112,7 +112,7 @@ export default function ReportManagement() {
                     <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>
                       Xem
                     </button>
-                    {report.status === "pending" && (
+                    {(report.status === "pending" || report.status === "open") && (
                       <button 
                         className="admin-btn admin-btn-primary" 
                         style={{ padding: "6px 10px", fontSize: "12px" }}

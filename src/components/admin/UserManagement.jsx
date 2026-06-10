@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getUsers, updateUserStatus } from "../../services/admin";
+import { getUsers, updateUserStatus, getUserById } from "../../services/admin";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -10,6 +10,8 @@ export default function UserManagement() {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [viewLoading, setViewLoading] = useState(false);
 
   // Load users from Supabase
   const loadUsers = async () => {
@@ -31,7 +33,7 @@ export default function UserManagement() {
         listings: user.listings_count,
         sales: user.sales_count,
         status: user.status,
-        joinDate: user.join_date,
+        joinDate: user.join_date || (user.created_at ? new Date(user.created_at).toLocaleDateString("vi-VN") : "—"),
         verificationStatus: user.verification_status,
       }));
       
@@ -65,6 +67,19 @@ export default function UserManagement() {
     } catch (err) {
       console.error("Failed to activate user:", err);
       setError("Không thể kích hoạt người dùng");
+    }
+  };
+
+  const handleViewUser = async (id) => {
+    try {
+      setViewLoading(true);
+      const data = await getUserById(id);
+      setSelectedUser(data);
+    } catch (err) {
+      console.error("Failed to fetch user details:", err);
+      alert("Không thể lấy chi tiết người dùng");
+    } finally {
+      setViewLoading(false);
     }
   };
 
@@ -198,8 +213,13 @@ export default function UserManagement() {
                 <td>{user.joinDate}</td>
                 <td>
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>
-                      Xem
+                    <button 
+                      className="admin-btn admin-btn-secondary" 
+                      style={{ padding: "6px 10px", fontSize: "12px" }}
+                      onClick={() => handleViewUser(user.id)}
+                      disabled={viewLoading}
+                    >
+                      {viewLoading && selectedUser?.id === user.id ? "..." : "Xem"}
                     </button>
                     {(user.status === "active") && (
                       <button 
@@ -251,6 +271,102 @@ export default function UserManagement() {
       <div style={{ marginTop: "16px", color: "#56647e", fontSize: "14px" }}>
         Hiển thị {users.length} người dùng
       </div>
+
+      {/* User Detail Modal */}
+      {selectedUser && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4"
+          onClick={() => setSelectedUser(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <h3 className="text-base font-bold text-slate-900">Chi Tiết Người Dùng</h3>
+              <button 
+                onClick={() => setSelectedUser(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors rounded-lg p-1"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+                <div className="w-16 h-16 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-2xl shadow-inner">
+                  {selectedUser.name?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold text-slate-900">{selectedUser.name}</h4>
+                  <p className="text-sm text-slate-500">{selectedUser.email}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Trạng Thái</span>
+                  <span className={`inline-block mt-1 admin-badge ${statusColor(selectedUser.status)}`}>
+                    {statusText(selectedUser.status)}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Vai Trò</span>
+                  <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 capitalize">
+                    {selectedUser.role}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Số Điện Thoại</span>
+                  <p className="mt-1 font-medium text-slate-800">{selectedUser.phone || "—"}</p>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Trường Học</span>
+                  <p className="mt-1 font-medium text-slate-800">{selectedUser.school || "—"}</p>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Số Dư Ví</span>
+                  <p className="mt-1 font-semibold text-teal-700">{(selectedUser.wallet_balance || 0).toLocaleString("vi-VN")}đ</p>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Tổng Thu Nhập</span>
+                  <p className="mt-1 font-semibold text-teal-700">{(selectedUser.total_income || 0).toLocaleString("vi-VN")}đ</p>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Số Tin Đăng</span>
+                  <p className="mt-1 font-medium text-slate-800">{selectedUser.listings_count || 0}</p>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Giao Dịch Thành Công</span>
+                  <p className="mt-1 font-medium text-slate-800">{selectedUser.sales_count || 0}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Địa Chỉ</span>
+                  <p className="mt-1 font-medium text-slate-800">{selectedUser.address || "—"}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="block text-xs font-semibold text-slate-400 uppercase">Tiểu Sử</span>
+                  <p className="mt-1 font-medium text-slate-800 italic">{selectedUser.bio || "Chưa cập nhật tiểu sử."}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
+              <button 
+                className="admin-btn admin-btn-secondary"
+                onClick={() => setSelectedUser(null)}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
