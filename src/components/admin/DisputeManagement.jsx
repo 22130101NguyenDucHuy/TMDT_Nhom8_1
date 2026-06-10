@@ -7,12 +7,12 @@ export default function DisputeManagement() {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [actionLoading, setActionLoading] = useState(null);
 
-  // Load disputes from Supabase
-  const loadDisputes = async () => {
+  const loadDisputes = async (background) => {
+    if (!background) setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const result = await getDisputes({}, page, 15);
       setDisputes(result.data || []);
       setTotalPages(result.totalPages || 1);
@@ -27,13 +27,20 @@ export default function DisputeManagement() {
   useEffect(() => { loadDisputes(); }, []);
   useEffect(() => { loadDisputes(); }, [page]);
 
+  const patchDispute = (id, updates) => {
+    setDisputes(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+  };
+
   const handleStatusUpdate = async (id, newStatus) => {
+    setActionLoading(id);
     try {
       await updateDisputeStatus(id, newStatus);
-      loadDisputes();
+      patchDispute(id, { status: newStatus });
     } catch (err) {
       console.error("Failed to update dispute:", err);
       setError("Không thể cập nhật tranh chấp");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -138,9 +145,10 @@ export default function DisputeManagement() {
                       <button 
                         className="admin-btn admin-btn-primary" 
                         style={{ padding: "6px 10px", fontSize: "12px" }}
+                        disabled={actionLoading === dispute.id}
                         onClick={() => handleStatusUpdate(dispute.id, "resolved")}
                       >
-                        Giải Quyết
+                        {actionLoading === dispute.id ? "..." : "Giải Quyết"}
                       </button>
                     )}
                   </div>

@@ -1,6 +1,15 @@
+import { Suspense } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import BrandLogo from "../common/BrandLogo";
 import "./AdminLayout.css";
+
+function AdminContentFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-700" />
+    </div>
+  );
+}
 
 export default function AdminLayout() {
   return (
@@ -66,7 +75,9 @@ export default function AdminLayout() {
 
       <main className="admin-main">
         <div className="admin-content">
-          <Outlet />
+          <Suspense fallback={<AdminContentFallback />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
     </div>

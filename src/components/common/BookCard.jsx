@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
 import { formatPrice } from "../../utils/formatters";
 import { getCategoryMeta } from "../../data/categoryMeta";
+import { getBookImageUrl } from "../../utils/imageResolver";
 
 export default function BookCard({ book }) {
-  const imgSrc = book.image || (Array.isArray(book.images) && book.images.length > 0 ? book.images[0] : null);
+  const imgSrc = getBookImageUrl(book);
   const sellerName = book.seller?.name || "Người bán";
   const sellerInitial = sellerName.charAt(0).toUpperCase();
   const displayName = sellerName.split(" ").pop();

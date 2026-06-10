@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "../services/supabase";
 
 const AuthContext = createContext();
@@ -22,7 +22,22 @@ export function AuthProvider({ children }) {
   };
 
   const [userData, setUserData] = useState(null);
+  const [oauthProviders, setOauthProviders] = useState(null);
   const oauthInProgress = useRef(false);
+
+  // Lấy danh sách OAuth provider đã bật — gọi trực tiếp REST API
+  // (supabase.auth.getSettings không có sẵn trong phiên bản này)
+  useEffect(() => {
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/settings`, {
+      headers: { apikey: key }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.external) setOauthProviders(data.external);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetchUserData = async (authUser) => {
@@ -146,6 +161,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signInWithOAuth = async (provider) => {
+    if (!oauthProviders) {
+      showToast('Đang tải cấu hình... Vui lòng thử lại.', 'error');
+      return;
+    }
+    if (!oauthProviders[provider]) {
+      showToast(`${provider === 'google' ? 'Google' : 'Microsoft'} chưa được bật. Vui lòng dùng email/mật khẩu.`, 'error');
+      return;
+    }
     oauthInProgress.current = true;
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
