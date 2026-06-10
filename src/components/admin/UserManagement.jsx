@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getUsers, updateUserStatus } from "../../services/admin";
 
 export default function UserManagement() {
@@ -31,6 +32,7 @@ export default function UserManagement() {
         sales: user.sales_count,
         status: user.status,
         joinDate: user.join_date,
+        verificationStatus: user.verification_status,
       }));
       
       setUsers(mappedData);
@@ -81,6 +83,24 @@ export default function UserManagement() {
       case "inactive": return "Không hoạt động";
       case "suspended": return "Đã khóa";
       default: return status;
+    }
+  };
+
+  const verificationColor = (status) => {
+    switch(status) {
+      case "approved": return "admin-badge-success";
+      case "pending": return "admin-badge-warning";
+      case "rejected": return "admin-badge-danger";
+      default: return "admin-badge-info";
+    }
+  };
+
+  const verificationText = (status) => {
+    switch(status) {
+      case "approved": return "Đã duyệt";
+      case "pending": return "Chờ duyệt";
+      case "rejected": return "Bị từ chối";
+      default: return "Chưa gửi";
     }
   };
 
@@ -153,6 +173,7 @@ export default function UserManagement() {
               <th>Listing</th>
               <th>Giao Dịch</th>
               <th>Trạng Thái</th>
+              <th>Xác thực SV</th>
               <th>Tham Gia</th>
               <th>Hành Động</th>
             </tr>
@@ -168,6 +189,11 @@ export default function UserManagement() {
                   <span className={`admin-badge ${statusColor(user.status)}`}>
                     {statusText(user.status)}
                   </span>
+                </td>
+                <td>
+                  <Link to="/admin/verifications" className={`admin-badge ${verificationColor(user.verificationStatus)}`} style={{ textDecoration: "none" }}>
+                    {verificationText(user.verificationStatus)}
+                  </Link>
                 </td>
                 <td>{user.joinDate}</td>
                 <td>
@@ -192,6 +218,15 @@ export default function UserManagement() {
                       >
                         Kích Hoạt
                       </button>
+                    )}
+                    {user.verificationStatus === "pending" && (
+                      <Link 
+                        to="/admin/verifications" 
+                        className="admin-btn admin-btn-primary" 
+                        style={{ padding: "6px 10px", fontSize: "12px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                      >
+                        Duyệt thẻ SV
+                      </Link>
                     )}
                   </div>
                 </td>

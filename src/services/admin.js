@@ -74,7 +74,26 @@ export async function getUsers(filters = {}, page = 1, perPage = 20) {
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
-    return { data: (data || []).map(formatUserForDisplay), total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
+
+    const userIds = (data || []).map(u => u.id);
+    let verificationsMap = {};
+    if (userIds.length > 0) {
+      const { data: vData } = await supabase
+        .from('lb_student_verifications')
+        .select('user_id, status')
+        .in('user_id', userIds);
+      (vData || []).forEach(v => {
+        verificationsMap[v.user_id] = v.status;
+      });
+    }
+
+    const enrichedData = (data || []).map(u => {
+      const displayUser = formatUserForDisplay(u);
+      displayUser.verification_status = verificationsMap[u.id] || null;
+      return displayUser;
+    });
+
+    return { data: enrichedData, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getUsers fallback:', err?.message);
     let mock = [...MOCK.users];
