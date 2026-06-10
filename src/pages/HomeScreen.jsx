@@ -58,10 +58,23 @@ function BookCardSkeleton() {
 export default function HomeScreen() {
   const { books, loading } = useBooks({ limit: 10 });
   const [categories, setCategories] = useState([]);
+  const [categoryCounts, setCategoryCounts] = useState({});
 
   useEffect(() => {
     supabase.from("lb_categories").select("*").order("order", { ascending: true })
       .then(({ data }) => { if (data) setCategories(data); })
+      .catch(() => {});
+
+    supabase.from("lb_books").select("category").eq("status", "active")
+      .then(({ data }) => {
+        if (data) {
+          const counts = {};
+          data.forEach(b => {
+            if (b.category) counts[b.category] = (counts[b.category] || 0) + 1;
+          });
+          setCategoryCounts(counts);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -201,7 +214,7 @@ export default function HomeScreen() {
               <div className="text-center">
                 <span className="block font-semibold text-slate-900 text-sm">{c.name}</span>
                 <span className="lb-category-count">
-                  {books.filter((b) => b.category === c.id).length} tài liệu
+                  {categoryCounts[c.id] || 0} tài liệu
                 </span>
               </div>
             </Link>
