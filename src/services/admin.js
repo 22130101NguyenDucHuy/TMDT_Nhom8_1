@@ -761,6 +761,63 @@ export async function markNotificationRead(notificationId) {
   }
 }
 
+export async function getVerifications(filters = {}, page = 1, perPage = 20) {
+  try {
+    let query = supabase.from('lb_student_verifications').select('*, user:user_id(id, name, email)', { count: 'exact' });
+    if (filters.status) query = query.eq('status', filters.status);
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
+    const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
+    if (error) throw error;
+    return { data: data || [], total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
+  } catch (err) {
+    console.warn('getVerifications fallback:', err?.message);
+    return { data: [], total: 0, page, perPage, totalPages: 1 };
+  }
+}
+
+export async function approveVerification(id, userId) {
+  try {
+    const { error: vErr } = await supabase
+      .from('lb_student_verifications')
+      .update({ status: 'approved' })
+      .eq('id', id);
+    if (vErr) throw vErr;
+
+    const { error: uErr } = await supabase
+      .from('lb_users')
+      .update({ status: 'active', updated_at: new Date().toISOString() })
+      .eq('id', userId);
+    if (uErr) throw uErr;
+
+    return true;
+  } catch (err) {
+    console.error('approveVerification error:', err);
+    throw err;
+  }
+}
+
+export async function rejectVerification(id, userId) {
+  try {
+    const { error: vErr } = await supabase
+      .from('lb_student_verifications')
+      .update({ status: 'rejected' })
+      .eq('id', id);
+    if (vErr) throw vErr;
+
+    const { error: uErr } = await supabase
+      .from('lb_users')
+      .update({ status: 'inactive', updated_at: new Date().toISOString() })
+      .eq('id', userId);
+    if (uErr) throw uErr;
+
+    return true;
+  } catch (err) {
+    console.error('rejectVerification error:', err);
+    throw err;
+  }
+}
+
 export default {
   getUsers, getUserById, updateUserStatus, updateUserRole, updateUserProfile, createUser,
   getListings, getListingById, updateListingStatus, deleteListing,
@@ -774,4 +831,5 @@ export default {
   getPromotions,
   getFeeConfigs, updateFeeConfig,
   getNotifications, markNotificationRead,
+  getVerifications, approveVerification, rejectVerification,
 };

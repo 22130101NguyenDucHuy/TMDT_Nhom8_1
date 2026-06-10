@@ -3,6 +3,7 @@ import { useAuth } from "./contexts/AuthContext";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import UserManagement from "./components/admin/UserManagement";
+import VerificationManagement from "./components/admin/VerificationManagement";
 import ListingManagement from "./components/admin/ListingManagement";
 import CategoryManagement from "./components/admin/CategoryManagement";
 import TransactionManagement from "./components/admin/TransactionManagement";
@@ -40,57 +41,34 @@ function AdminGuard({ children }) {
 }
 
 export default function App() {
-    return ( <
-        BrowserRouter >
-        <
-        Routes > { /* Admin Routes */ } <
-        Route element = { < AdminGuard > < AdminLayout / > < /AdminGuard> }
-        path = "/admin" >
-        <
-        Route element = { < AdminDashboard / > }
-        index / >
-        <
-        Route element = { < UserManagement / > }
-        path = "users" / >
-        <
-        Route element = { < ListingManagement / > }
-        path = "listings" / >
-        <
-        Route element = { < CategoryManagement / > }
-        path = "categories" / >
-        <
-        Route element = { < TransactionManagement / > }
-        path = "transactions" / >
-        <
-        Route element = { < PremiumManagement / > }
-        path = "premium" / >
-        <
-        Route element = { < DisputeManagement / > }
-        path = "disputes" / >
-        <
-        Route element = { < ReportManagement / > }
-        path = "reports" / >
-        <
-        Route element = { < AdminSettings / > }
-        path = "settings" / >
-        <
-        /Route>
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Admin Routes */}
+        <Route element={<AdminGuard><AdminLayout /></AdminGuard>} path="/admin">
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="verifications" element={<VerificationManagement />} />
+          <Route path="listings" element={<ListingManagement />} />
+          <Route path="categories" element={<CategoryManagement />} />
+          <Route path="transactions" element={<TransactionManagement />} />
+          <Route path="premium" element={<PremiumManagement />} />
+          <Route path="disputes" element={<DisputeManagement />} />
+          <Route path="reports" element={<ReportManagement />} />
+          <Route path="settings" element={<AdminSettings />} />
+        </Route>
 
-        { /* Auth Routes */ } <
-        Route element = { < ForgotPasswordScreen / > }
-        path = "/forgot-password" / >
-        <
-        Route element = { < ResetPasswordScreen / > }
-        path = "/reset-password" / >
+        {/* Auth Routes */}
+        <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
+        <Route path="/reset-password" element={<ResetPasswordScreen />} />
 
-        { /* Main App Routes */ }
-        <Route element={<AppShell />} path="/checkout/:bookId" />
-        <Route element={<AppShell />} path="/transaction/:id/success" />
-        <Route element={<AppShell />} path="/my-transactions" />
-        <Route element={<AppShell />} path="/wallet" />
-        <Route element={<AppShell />} path="/*" />
-        <
-        /Routes> <
-        /BrowserRouter>
-    );
+        {/* Main App Routes */}
+        <Route path="/checkout/:bookId" element={<AppShell />} />
+        <Route path="/transaction/:id/success" element={<AppShell />} />
+        <Route path="/my-transactions" element={<AppShell />} />
+        <Route path="/wallet" element={<AppShell />} />
+        <Route path="/*" element={<AppShell />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }

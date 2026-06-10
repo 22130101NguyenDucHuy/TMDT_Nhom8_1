@@ -184,6 +184,32 @@ export default function CheckoutScreen() {
     );
   }
 
+  if (userData.status === 'inactive') {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-50 rounded-full mb-4 text-amber-500 shadow-sm">
+          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <h2 className="text-xl font-bold text-slate-800 mb-2">Tài khoản chưa được kích hoạt</h2>
+        <p className="text-slate-500 text-sm mb-5 max-w-md mx-auto">Tài khoản của bạn đang chờ phê duyệt thẻ sinh viên để thực hiện mua sách.</p>
+        <button onClick={() => navigate("/")} className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</button>
+      </div>
+    );
+  }
+
+  if (userData.status === 'suspended') {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-full mb-4 text-red-500 shadow-sm">
+          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <h2 className="text-xl font-bold text-slate-800 mb-2">Tài khoản đã bị khóa</h2>
+        <p className="text-slate-500 text-sm mb-5 max-w-md mx-auto">Tài khoản của bạn đã bị khóa do vi phạm chính sách của LoopBook.</p>
+        <button onClick={() => navigate("/")} className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</button>
+      </div>
+    );
+  }
+
   // 3. Đang load data sách
   if (loading) {
     return (

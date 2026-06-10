@@ -25,6 +25,9 @@ export default function AdminLayout() {
             <NavLink to="/admin/users" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
               Người Dùng
             </NavLink>
+            <NavLink to="/admin/verifications" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
+              Xác thực sinh viên
+            </NavLink>
             <NavLink to="/admin/listings" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
               Listing/Sách
             </NavLink>

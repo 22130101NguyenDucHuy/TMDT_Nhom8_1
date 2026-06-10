@@ -59,7 +59,8 @@ export default function AuthModal() {
             {
               id: data.user.id,
               email: data.user.email,
-              name: "Người dùng mới"
+              name: "Người dùng mới",
+              status: "inactive"
             }
           ]);
 
