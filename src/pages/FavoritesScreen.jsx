@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
+import { getBookImageUrl } from "../utils/imageResolver";
 
 export default function FavoritesScreen() {
   const { user, showToast } = useAuth();
@@ -86,7 +87,7 @@ export default function FavoritesScreen() {
         </p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-700" />
@@ -105,17 +106,17 @@ export default function FavoritesScreen() {
           <div className="divide-y divide-slate-100">
             {favorites.map((fav) => {
               const book = fav.book;
-              const imgSrc = book?.image || (Array.isArray(book?.images) && book.images.length > 0 ? book.images[0] : null);
+              const imgSrc = getBookImageUrl(book);
               const isRemoving = removingId === fav.id;
 
               return (
                 <div
                   key={fav.id}
-                  className={`flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors group ${isRemoving ? "opacity-50 pointer-events-none" : ""}`}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-4 hover:bg-slate-50 transition-colors group ${isRemoving ? "opacity-50 pointer-events-none" : ""}`}
                 >
                   {/* Thumbnail + info — click vào xem chi tiết */}
                   <Link to={`/sach/${fav.book_id}`} className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-14 h-16 flex-shrink-0 rounded-lg overflow-hidden border border-slate-100 bg-slate-100">
+                    <div className="w-14 h-16 flex-shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
                       {imgSrc ? (
                         <img src={imgSrc} alt={book?.title} className="w-full h-full object-cover" />
                       ) : (
@@ -127,26 +128,26 @@ export default function FavoritesScreen() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 text-sm truncate">{book?.title || "—"}</p>
+                      <p className="font-semibold text-slate-900 text-sm truncate group-hover:text-teal-700 transition-colors">{book?.title || "—"}</p>
                       <p className="text-xs text-slate-400 mt-0.5 truncate">{book?.school || ""}</p>
                       <p className="text-sm font-bold text-slate-800 mt-1">{formatPrice(book?.price ?? 0)}</p>
                     </div>
                   </Link>
 
-                  {/* Actions — hiện khi hover */}
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Actions — luôn hiển thị rõ ràng, phân cách bằng border trên mobile và border-l trên desktop */}
+                  <div className="flex items-center gap-3 shrink-0 border-t sm:border-t-0 sm:border-l border-slate-150 pt-3 sm:pt-0 sm:pl-4 w-full sm:w-auto justify-end">
                     <Link
                       to={`/sach/${fav.book_id}`}
-                      className="text-xs text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center justify-center text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-3.5 py-1.5 rounded-lg hover:bg-teal-100 hover:border-teal-300 transition-all active:scale-95"
                     >
-                      Xem
+                      Xem chi tiết
                     </Link>
                     <button
                       onClick={() => handleRemove(fav.id, book?.title || "sách")}
                       disabled={isRemoving}
-                      className="text-xs text-red-500 border border-red-200 px-2 py-0.5 rounded-full hover:bg-red-50 transition-colors disabled:opacity-50"
+                      className="inline-flex items-center justify-center text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-3.5 py-1.5 rounded-lg hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 transition-all disabled:opacity-50 active:scale-95"
                     >
-                      {isRemoving ? "…" : "Bỏ thích"}
+                      {isRemoving ? "Đang xóa…" : "Bỏ thích"}
                     </button>
                   </div>
                 </div>
@@ -158,3 +159,4 @@ export default function FavoritesScreen() {
     </div>
   );
 }
+

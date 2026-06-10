@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
 import { formatPrice } from "../utils/formatters";
+import { getBookImageUrl } from "../utils/imageResolver";
 
 const TABS = [
   { key: "active", label: "Đang đăng" },
@@ -58,7 +59,7 @@ export default function DashboardScreen() {
 
     supabase
       .from("lb_books")
-      .select("id, title, condition, price, image, status, created_at, school, urgent")
+      .select("id, title, condition, price, image, images, status, created_at, school, urgent")
       .eq("seller_id", user.id)
       .eq("status", activeTab)
       .order("created_at", { ascending: false })
@@ -79,6 +80,19 @@ export default function DashboardScreen() {
       </div>
     );
   }
+
+  const handleEditClick = (bookId, status) => {
+    let confirmMsg = "Bạn có chắc chắn muốn chỉnh sửa tài liệu này?";
+    if (status === "active") {
+      confirmMsg = "Lưu ý: Chỉnh sửa thông tin bài đăng sẽ tạm thời ẩn tài liệu và đưa bài đăng trở về trạng thái 'Chờ duyệt' để Admin phê duyệt lại. Bạn có chắc chắn muốn tiếp tục?";
+    } else if (status === "pending") {
+      confirmMsg = "Tài liệu này đang chờ duyệt. Chỉnh sửa sẽ tiếp tục giữ bài đăng ở trạng thái chờ duyệt. Bạn có muốn tiếp tục?";
+    }
+
+    if (window.confirm(confirmMsg)) {
+      navigate(`/sua-bai/${bookId}`);
+    }
+  };
 
   const handleMarkSold = async (bookId) => {
     if (!window.confirm("Xác nhận đánh dấu tài liệu này đã bán?")) return;
@@ -139,7 +153,7 @@ export default function DashboardScreen() {
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Danh sách tin đăng */}
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           {/* Tabs */}
           <div className="flex border-b border-slate-100">
             {TABS.map((tab) => (
@@ -179,78 +193,97 @@ export default function DashboardScreen() {
                 )}
               </div>
             ) : (
-              books.map((book) => (
-                <div key={book.id} className="flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors group">
-                  {/* Ảnh */}
-                  <div className="w-12 h-14 flex-shrink-0 rounded-lg overflow-hidden border border-slate-100 bg-slate-100">
-                    {book.image ? (
-                      <img src={book.image} alt={book.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-300">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
+              books.map((book) => {
+                const imgSrc = getBookImageUrl(book);
+                return (
+                  <div key={book.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-4 hover:bg-slate-50 transition-colors group">
+                    {/* Ảnh + Info */}
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="w-12 h-14 flex-shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                        {imgSrc ? (
+                          <img src={imgSrc} alt={book.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-300">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 text-sm truncate">{book.title}</p>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusBadge(book.status)}`}>
-                        {book.status === "active" ? "Đang bán" : book.status === "pending" ? "Chờ duyệt" : book.status === "draft" ? "Nháp" : "Đã bán"}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {conditionMap[book.condition] || book.condition}
-                      </span>
-                      {book.urgent && (
-                        <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">🔥 Bán gấp</span>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 text-sm truncate group-hover:text-teal-700 transition-colors">{book.title}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusBadge(book.status)}`}>
+                            {book.status === "active" ? "Đang bán" : book.status === "pending" ? "Chờ duyệt" : book.status === "draft" ? "Nháp" : "Đã bán"}
+                          </span>
+                          <span className="text-xs text-slate-400 font-medium">
+                            {conditionMap[book.condition] || book.condition}
+                          </span>
+                          {book.school && (
+                            <span className="text-xs text-slate-400 font-medium">
+                              · {book.school}
+                            </span>
+                          )}
+                          {book.urgent && (
+                            <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-semibold">Bán gấp</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Giá + Actions */}
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <span className="font-bold text-slate-900 text-sm">{formatPrice(book.price)}</span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link
-                        to={`/sach/${book.id}`}
-                        className="text-xs text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full hover:bg-slate-100 transition-colors"
-                      >
-                        Xem
-                      </Link>
-                      {book.status === "active" && (
-                        <>
-                          <Link
-                            to={`/sua-bai/${book.id}`}
-                            className="text-xs text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-50 transition-colors"
+                    {/* Giá + Actions — luôn hiển thị rõ ràng */}
+                    <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-3 w-full sm:w-auto border-t sm:border-t-0 border-slate-150 pt-3 sm:pt-0">
+                      {/* Price */}
+                      <div className="flex flex-col sm:items-end">
+                        <span className="text-xs text-slate-400 font-medium sm:hidden">Giá bán:</span>
+                        <span className="font-extrabold text-teal-700 text-base">{formatPrice(book.price)}</span>
+                      </div>
+
+                      {/* Buttons List */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Link
+                          to={`/sach/${book.id}`}
+                          className="inline-flex items-center justify-center text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 hover:border-slate-300 transition-all active:scale-95"
+                        >
+                          Xem
+                        </Link>
+
+                        {book.status !== "sold" && (
+                          <button
+                            onClick={() => handleEditClick(book.id, book.status)}
+                            className="inline-flex items-center justify-center text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all active:scale-95"
                           >
                             Sửa
-                          </Link>
+                          </button>
+                        )}
+
+                        {book.status === "active" && (
                           <button
                             onClick={() => handleMarkSold(book.id)}
-                            className="text-xs text-green-600 border border-green-200 px-2 py-0.5 rounded-full hover:bg-green-50 transition-colors"
+                            className="inline-flex items-center justify-center text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100 hover:border-emerald-300 transition-all active:scale-95"
                           >
                             Đã bán
                           </button>
-                        </>
-                      )}
-                      {book.status !== "sold" && (
-                        <button
-                          onClick={() => handleDelete(book.id)}
-                          className="text-xs text-red-500 border border-red-200 px-2 py-0.5 rounded-full hover:bg-red-50 transition-colors"
-                        >
-                          Xóa
-                        </button>
-                      )}
+                        )}
+
+                        {book.status !== "sold" && (
+                          <button
+                            onClick={() => handleDelete(book.id)}
+                            className="inline-flex items-center justify-center text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg hover:bg-rose-100 hover:border-rose-300 transition-all active:scale-95"
+                          >
+                            Xóa
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
+
 
         {/* Cột phải - Truy cập nhanh */}
         <div className="flex flex-col gap-4">

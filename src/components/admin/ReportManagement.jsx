@@ -7,12 +7,12 @@ export default function ReportManagement() {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [actionLoading, setActionLoading] = useState(null);
 
-  // Load reports from Supabase
-  const loadReports = async () => {
+  const loadReports = async (background) => {
+    if (!background) setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const result = await getReports({}, page, 15);
       setReports(result.data || []);
       setTotalPages(result.totalPages || 1);
@@ -27,13 +27,20 @@ export default function ReportManagement() {
   useEffect(() => { loadReports(); }, []);
   useEffect(() => { loadReports(); }, [page]);
 
+  const patchReport = (id, updates) => {
+    setReports(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
   const handleStatusUpdate = async (id, newStatus) => {
+    setActionLoading(id);
     try {
       await updateReportStatus(id, newStatus);
-      loadReports();
+      patchReport(id, { status: newStatus });
     } catch (err) {
       console.error("Failed to update report:", err);
       setError("Không thể cập nhật báo cáo");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -116,9 +123,10 @@ export default function ReportManagement() {
                       <button 
                         className="admin-btn admin-btn-primary" 
                         style={{ padding: "6px 10px", fontSize: "12px" }}
+                        disabled={actionLoading === report.id}
                         onClick={() => handleStatusUpdate(report.id, "reviewed")}
                       >
-                        Xử Lý
+                        {actionLoading === report.id ? "..." : "Xử Lý"}
                       </button>
                     )}
                   </div>

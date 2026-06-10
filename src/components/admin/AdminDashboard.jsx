@@ -42,8 +42,8 @@ export default function AdminDashboard() {
   const [startDate, setStartDate] = useState(daysAgo(30));
   const [endDate, setEndDate] = useState(today());
 
-  const fetchAll = async (sd, ed, tPage) => {
-    setLoading(true);
+  const fetchAll = async (sd, ed, tPage, background) => {
+    if (!background) setLoading(true);
     const [statsData, txnData, analytics, catStats] = await Promise.all([
       getDashboardStats(),
       getTransactions({}, tPage || txPage, 7),
@@ -59,7 +59,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => { fetchAll(startDate, endDate, 1); }, [startDate, endDate]);
-  useEffect(() => { if (!loading) fetchAll(startDate, endDate, txPage); }, [txPage]);
+  useEffect(() => { if (!loading) fetchAll(startDate, endDate, txPage, true); }, [txPage]);
 
   // Quick date range presets
   const setRange = (days) => {

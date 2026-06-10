@@ -72,6 +72,7 @@ export default function PremiumManagement() {
   const [planModal, setPlanModal] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [actionLoading, setActionLoading] = useState(null);
 
   const loadPlans = async () => {
     const { data } = await supabase.from("lb_premium_plans").select("*").order("price", { ascending: true });
@@ -96,12 +97,16 @@ export default function PremiumManagement() {
   const handleSavePlan = async (payload, planId) => {
     try {
       if (planId) {
-        await supabase.from("lb_premium_plans").update(payload).eq("id", planId);
+        const { data, error } = await supabase.from("lb_premium_plans").update(payload).eq("id", planId).select();
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error("Không tìm thấy gói premium");
+        setPlans(prev => prev.map(p => p.id === planId ? { ...p, ...data[0] } : p));
       } else {
-        await supabase.from("lb_premium_plans").insert([payload]);
+        const { data, error } = await supabase.from("lb_premium_plans").insert([payload]).select();
+        if (error) throw error;
+        if (data) setPlans(prev => [...prev, data[0]]);
       }
       setPlanModal(null);
-      loadPlans();
     } catch (err) {
       console.error("Save plan error:", err);
     }
@@ -109,8 +114,15 @@ export default function PremiumManagement() {
 
   const handleDeletePlan = async (planId) => {
     if (!window.confirm("Xóa gói này?")) return;
-    await supabase.from("lb_premium_plans").delete().eq("id", planId);
-    loadPlans();
+    setActionLoading(planId);
+    try {
+      await supabase.from("lb_premium_plans").delete().eq("id", planId);
+      setPlans(prev => prev.filter(p => p.id !== planId));
+    } catch (err) {
+      console.error("Delete plan error:", err);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const statusColor = (s) => s === "active" ? "admin-badge-success" : "admin-badge-danger";
@@ -170,7 +182,9 @@ export default function PremiumManagement() {
                   <td>
                     <div style={{ display: "flex", gap: "6px" }}>
                       <button onClick={() => setPlanModal(p)} className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Sửa</button>
-                      <button onClick={() => handleDeletePlan(p.id)} className="admin-btn admin-btn-danger" style={{ padding: "6px 10px", fontSize: "12px" }}>Xóa</button>
+                      <button onClick={() => handleDeletePlan(p.id)} className="admin-btn admin-btn-danger" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === p.id}>
+                        {actionLoading === p.id ? "..." : "Xóa"}
+                      </button>
                     </div>
                   </td>
                 </tr>

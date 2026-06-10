@@ -25,11 +25,12 @@ export default function TransactionManagement() {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [actionLoading, setActionLoading] = useState(null);
 
-  const loadTransactions = async () => {
+  const loadTransactions = async (background) => {
+    if (!background) setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const filters = {};
       if (filterStatus !== "all") filters.status = filterStatus;
       if (searchTerm) filters.search = searchTerm;
@@ -48,6 +49,10 @@ export default function TransactionManagement() {
     loadTransactions();
   }, [filterStatus, searchTerm]);
   useEffect(() => { loadTransactions(); }, [page]);
+
+  const patchTx = (id, updates) => {
+    setTxList(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
 
   const statusColor = (status) => {
     const colors = {
@@ -175,7 +180,9 @@ export default function TransactionManagement() {
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Chi Tiết</button>
                     {(tx.status === "pending" || tx.status === "awaiting_meet") && (
-                      <button onClick={() => handleConfirm(tx.id)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }}>Xác Nhận</button>
+                      <button onClick={() => handleConfirm(tx.id)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === tx.id}>
+                        {actionLoading === tx.id ? "..." : "Xác Nhận"}
+                      </button>
                     )}
                     <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Liên Hệ</button>
                   </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import BookCard from "../components/common/BookCard";
+import { getBookImageUrl, resolveBookImages } from "../utils/imageResolver";
 
 const PAGE_SIZE = 12;
 
@@ -28,29 +29,7 @@ const categoryMeta = {
 
 // Normalize book data từ Supabase
 const normalizeBook = (b) => {
-  const defaultImageMap = {
-    "chuyen-doi-so": "chuyendoi.jpg",
-    "benh-gom-den": "benhgomden.jpg",
-    "benh-heo": "benhheo.jpg",
-    "cong-nghe-mang-loc": "cnghemangloc.jpg",
-    "cong-nghe-nuoi-trong": "cnghenuoitrong.jpg",
-    "phat-trien-san-pham": "ptriensp.jpg",
-    "suc-ben-vat-lieu": "sbvl.jpg",
-    "xa-hoi-hoc": "xhh.jpg",
-    "anh-banner": "618572354_1397613058830175_8168212988356921032_n.jpg",
-  };
-
-  let imgs = [];
-  if (Array.isArray(b.images) && b.images.length > 0) {
-    imgs = b.images.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${img}`);
-  } else {
-    const fallbackFile = defaultImageMap[b.id];
-    if (fallbackFile) {
-      imgs = [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${fallbackFile}`];
-    } else {
-      imgs = [`https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${b.id}_0.jpg`];
-    }
-  }
+  const imgs = resolveBookImages(b.id, b.images);
 
   return {
     ...b,

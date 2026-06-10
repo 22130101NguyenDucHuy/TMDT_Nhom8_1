@@ -50,6 +50,7 @@ export default function EditListingScreen() {
   const [locationStr, setLocationStr] = useState("");
   const [selectedDeliveries, setSelectedDeliveries] = useState(["meet"]);
   const [isUrgent, setIsUrgent] = useState(false);
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     if (!bookId || !user) return;
@@ -80,6 +81,7 @@ export default function EditListingScreen() {
         setLocationStr(data.location_text || "");
         setSelectedDeliveries(data.delivery_methods || ["meet"]);
         setIsUrgent(data.urgent || false);
+        setStatus(data.status || "");
       } catch (err) {
         showToast("Lỗi tải dữ liệu", "error");
         navigate("/quan-ly");
@@ -126,12 +128,13 @@ export default function EditListingScreen() {
           delivery_methods: selectedDeliveries,
           urgent: isUrgent,
           tags,
+          status: status === "draft" ? "draft" : "pending",
           updated_at: new Date().toISOString(),
         })
         .eq("id", bookId)
         .eq("seller_id", user.id);
       if (error) throw error;
-      showToast("Cập nhật thành công!", "success");
+      showToast(status === "draft" ? "Cập nhật bản nháp thành công!" : "Cập nhật thành công! Bài đăng đã được chuyển sang trạng thái chờ duyệt.", "success");
       navigate("/quan-ly");
     } catch (err) {
       showToast(err.message || "Có lỗi xảy ra", "error");
@@ -168,6 +171,21 @@ export default function EditListingScreen() {
           <h1 className="text-2xl font-bold text-slate-900">Sửa bài đăng</h1>
         </div>
       </div>
+
+      {status && status !== "draft" && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex gap-3 items-start">
+          <svg className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <p className="font-bold text-amber-900">Lưu ý quan trọng</p>
+            <p className="mt-0.5">
+              Sau khi lưu các thay đổi, bài đăng này sẽ tạm thời ẩn và trở về trạng thái <strong>Chờ duyệt</strong> để Admin duyệt lại trước khi hiển thị công khai.
+            </p>
+          </div>
+        </div>
+      )}
+
 
       <div className="bg-white border border-slate-200 rounded-lg p-6 mb-6 shadow-sm">
         <h2 className="font-bold text-slate-900 text-lg mb-4">Thông tin cơ bản</h2>

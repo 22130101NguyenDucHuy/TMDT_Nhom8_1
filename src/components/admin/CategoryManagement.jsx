@@ -58,9 +58,9 @@ export default function CategoryManagement() {
   const [saving, setSaving] = useState(false);
 
   // ── load ────────────────────────────────────────────────────────────────────
-  const load = async () => {
+  const load = async (background) => {
+    if (!background) setLoading(true);
     try {
-      setLoading(true);
       const [data, counts] = await Promise.all([
         getCategories(),
         getCategoryStats(),
@@ -101,7 +101,7 @@ export default function CategoryManagement() {
         is_active: true,
       });
       setForm(EMPTY_FORM);
-      await load();
+      await load(true);
       showToast('Đã thêm danh mục thành công');
     } catch (err) {
       console.error(err);
@@ -119,14 +119,14 @@ export default function CategoryManagement() {
     }
     try {
       setSaving(true);
-      await updateCategory(editCat.id, {
+      const updated = await updateCategory(editCat.id, {
         name:      editCat.name.trim(),
         accent:    editCat.accent,
         order:     Number(editCat.order),
         is_active: editCat.is_active,
       });
+      setCategories(prev => prev.map(c => c.id === editCat.id ? { ...c, ...updated } : c));
       setEditCat(null);
-      await load();
       showToast('Đã cập nhật danh mục');
     } catch (err) {
       console.error(err);
@@ -155,7 +155,7 @@ export default function CategoryManagement() {
     if (!window.confirm(`Bạn có chắc muốn xóa danh mục "${cat.name}"? Hành động này không thể hoàn tác.`)) return;
     try {
       await deleteCategory(cat.id);
-      await load();
+      setCategories(prev => prev.filter(c => c.id !== cat.id));
       showToast('Đã xóa danh mục');
     } catch (err) {
       console.error(err);
