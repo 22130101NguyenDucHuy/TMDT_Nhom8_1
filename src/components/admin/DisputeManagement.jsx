@@ -5,32 +5,32 @@ export default function DisputeManagement() {
   const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Load disputes from Supabase
-  useEffect(() => {
-    const loadDisputes = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await getDisputes();
-        setDisputes(result.data || []);
-      } catch (err) {
-        console.error("Failed to load disputes:", err);
-        setError("Không thể tải danh sách tranh chấp");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadDisputes = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await getDisputes({}, page, 15);
+      setDisputes(result.data || []);
+      setTotalPages(result.totalPages || 1);
+    } catch (err) {
+      console.error("Failed to load disputes:", err);
+      setError("Không thể tải danh sách tranh chấp");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    loadDisputes();
-  }, []);
+  useEffect(() => { loadDisputes(); }, []);
+  useEffect(() => { loadDisputes(); }, [page]);
 
   const handleStatusUpdate = async (id, newStatus) => {
     try {
       await updateDisputeStatus(id, newStatus);
-      // Refresh disputes
-      const result = await getDisputes();
-      setDisputes(result.data || []);
+      loadDisputes();
     } catch (err) {
       console.error("Failed to update dispute:", err);
       setError("Không thể cập nhật tranh chấp");
@@ -147,6 +147,18 @@ export default function DisputeManagement() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+        <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          ← Trước
+        </button>
+        <span style={{ fontSize: "13px", color: "#56647e" }}>Trang {page} / {totalPages}</span>
+        <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          Sau →
+        </button>
       </div>
     </div>
   );

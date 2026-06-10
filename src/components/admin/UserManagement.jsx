@@ -7,51 +7,23 @@ export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Load users from Supabase
-  useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Map Supabase columns to component column names
-        const filters = filterStatus !== "all" ? { status: filterStatus } : {};
-        if (searchTerm) {
-          filters.search = searchTerm;
-        }
-        
-        const result = await getUsers(filters);
-        const mappedData = (result.data || []).map(user => ({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          listings: user.listings_count,
-          sales: user.sales_count,
-          status: user.status,
-          joinDate: user.join_date,
-        }));
-        
-        setUsers(mappedData);
-      } catch (err) {
-        console.error("Failed to load users:", err);
-        setError("Không thể tải danh sách người dùng");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUsers();
-  }, [filterStatus, searchTerm]);
-
-  const handleSuspend = async (id) => {
+  const loadUsers = async () => {
     try {
-      await updateUserStatus(id, "suspended");
-      // Refresh users list
+      setLoading(true);
+      setError(null);
+      
+      // Map Supabase columns to component column names
       const filters = filterStatus !== "all" ? { status: filterStatus } : {};
-      if (searchTerm) filters.search = searchTerm;
-      const data = await getUsers(filters);
-      const mappedData = data.map(user => ({
+      if (searchTerm) {
+        filters.search = searchTerm;
+      }
+      
+      const result = await getUsers(filters, page, 15);
+      const mappedData = (result.data || []).map(user => ({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -60,7 +32,24 @@ export default function UserManagement() {
         status: user.status,
         joinDate: user.join_date,
       }));
+      
       setUsers(mappedData);
+      setTotalPages(result.totalPages || 1);
+    } catch (err) {
+      console.error("Failed to load users:", err);
+      setError("Không thể tải danh sách người dùng");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadUsers(); }, [filterStatus, searchTerm]);
+  useEffect(() => { loadUsers(); }, [page]);
+
+  const handleSuspend = async (id) => {
+    try {
+      await updateUserStatus(id, "suspended");
+      loadUsers();
     } catch (err) {
       console.error("Failed to suspend user:", err);
       setError("Không thể khóa người dùng");
@@ -70,20 +59,7 @@ export default function UserManagement() {
   const handleActivate = async (id) => {
     try {
       await updateUserStatus(id, "active");
-      // Refresh users list
-      const filters = filterStatus !== "all" ? { status: filterStatus } : {};
-      if (searchTerm) filters.search = searchTerm;
-      const data = await getUsers(filters);
-      const mappedData = data.map(user => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        listings: user.listings_count,
-        sales: user.sales_count,
-        status: user.status,
-        joinDate: user.join_date,
-      }));
-      setUsers(mappedData);
+      loadUsers();
     } catch (err) {
       console.error("Failed to activate user:", err);
       setError("Không thể kích hoạt người dùng");
@@ -152,13 +128,13 @@ export default function UserManagement() {
             className="admin-filter-input with-search" 
             placeholder="Tìm theo tên hoặc email..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
           />
         </div>
         <select 
           className="admin-filter-select"
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
+          onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
         >
           <option value="all">Tất Cả Trạng Thái</option>
           <option value="active">Hoạt Động</option>
@@ -199,7 +175,7 @@ export default function UserManagement() {
                     <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>
                       Xem
                     </button>
-                    {user.status === "active" && (
+                    {(user.status === "active") && (
                       <button 
                         className="admin-btn admin-btn-danger" 
                         style={{ padding: "6px 10px", fontSize: "12px" }}
@@ -208,7 +184,7 @@ export default function UserManagement() {
                         Khóa
                       </button>
                     )}
-                    {user.status === "suspended" && (
+                    {(user.status === "suspended" || user.status === "inactive") && (
                       <button 
                         className="admin-btn admin-btn-success" 
                         style={{ padding: "6px 10px", fontSize: "12px" }}
@@ -223,6 +199,18 @@ export default function UserManagement() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+        <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          ← Trước
+        </button>
+        <span style={{ fontSize: "13px", color: "#56647e" }}>Trang {page} / {totalPages}</span>
+        <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+          style={{ padding: "6px 14px", borderRadius: "8px", border: "1px solid #d0d5dd", fontSize: "13px", fontWeight: 600 }}>
+          Sau →
+        </button>
       </div>
 
       <div style={{ marginTop: "16px", color: "#56647e", fontSize: "14px" }}>

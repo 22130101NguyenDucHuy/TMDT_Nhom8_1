@@ -74,7 +74,7 @@ export function useBooks(options = {}) {
 
           let imgs = [];
           if (Array.isArray(b.images) && b.images.length > 0) {
-            imgs = b.images.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books2/${img}`);
+            imgs = b.images.map(img => img.startsWith('http') ? img : `https://ehvgtgzleukxtqgstivd.supabase.co/storage/v1/object/public/books/${img}`);
           } else {
             const fallbackFile = defaultImageMap[b.id];
             if (fallbackFile) {

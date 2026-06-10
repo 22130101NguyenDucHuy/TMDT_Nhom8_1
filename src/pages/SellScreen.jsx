@@ -50,11 +50,20 @@ export default function SellScreen() {
    const [edition, setEdition] = useState("");
    const [school, setSchool] = useState("");
    const [year, setYear] = useState("");
+   const [isbn, setIsbn] = useState("");
+   const [isbnLoading, setIsbnLoading] = useState(false);
 
-   // Khối 3: Định giá & Mô tả
-   const [price, setPrice] = useState("");
-   const [allowOffers, setAllowOffers] = useState(true);
-   const [description, setDescription] = useState("");
+    // Khối 3: Định giá & Mô tả
+    const [price, setPrice] = useState("");
+    const [allowOffers, setAllowOffers] = useState(true);
+    const [description, setDescription] = useState("");
+
+    // Tag giá trị cộng thêm
+    const [hasHighlight, setHasHighlight] = useState(false);
+    const [hasOldExams, setHasOldExams] = useState(false);
+    const [hasMindmap, setHasMindmap] = useState(false);
+    const [hasNotes, setHasNotes] = useState(false);
+    const [hasSolutions, setHasSolutions] = useState(false);
 
    // Khối 4: Giao dịch & Urgent
    const [locationStr, setLocationStr] = useState("");
@@ -124,6 +133,39 @@ export default function SellScreen() {
       setDescription("Sách sử dụng cho môn [...], tình trạng [...], có highlight ở chương [...], mua tại [...]. Phù hợp cho các bạn sinh viên năm [...].");
    };
 
+   // ISBN / Barcode Scanning
+   const fetchBookByISBN = async (isbnCode) => {
+      if (!isbnCode || isbnCode.length < 10) {
+         showToast("Vui lòng nhập mã ISBN hợp lệ (10-13 số)", "error");
+         return;
+      }
+      setIsbnLoading(true);
+      try {
+         const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbnCode}`);
+         const data = await response.json();
+         if (data.items && data.items.length > 0) {
+            const book = data.items[0].volumeInfo;
+            setTitle(book.title || "");
+            setAuthor(book.authors ? book.authors.join(", ") : "");
+            setPublisher(book.publisher || "");
+            setYear(book.publishedDate ? book.publishedDate.split("-")[0] : "");
+            setDescription(book.description ? book.description.substring(0, 500) : "");
+            if (book.imageLinks?.thumbnail) {
+               // Lưu URL ảnh bìa vào state để hiển thị
+               setImages([{ file: null, preview: book.imageLinks.thumbnail, isExternal: true }]);
+            }
+            showToast("Đã tìm thấy thông tin sách!", "success");
+         } else {
+            showToast("Không tìm thấy sách với mã ISBN này.", "error");
+         }
+      } catch (err) {
+         console.error("ISBN fetch error:", err);
+         showToast("Lỗi khi tra cứu ISBN. Vui lòng thử lại.", "error");
+      } finally {
+         setIsbnLoading(false);
+      }
+   };
+
    const validateForm = () => {
       const newErrors = {};
       if (images.length === 0) newErrors.images = "Vui lòng tải lên ít nhất 1 ảnh.";
@@ -146,8 +188,8 @@ export default function SellScreen() {
 
       setLoading(true);
       try {
-         // 1. Generate unique ID cho bài đăng
-         const bookId = `bk_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 6)}`;
+         // 1. Generate UUID-like ID cho bài đăng
+          const bookId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`;
          const numericPrice = price ? parseInt(price.replace(/,/g, ""), 10) : 0;
          const numericYear = year ? parseInt(year, 10) : null;
 
@@ -160,11 +202,11 @@ export default function SellScreen() {
             const fileName = `${bookId}_${i}.${fileExt}`;
 
             const { error: uploadError } = await supabase.storage
-               .from('books2')
+               .from('books')
                .upload(fileName, file);
             if (uploadError) throw uploadError;
 
-            const { data: urlData } = supabase.storage.from('books2').getPublicUrl(fileName);
+            const { data: urlData } = supabase.storage.from('books').getPublicUrl(fileName);
             uploadedUrls.push(urlData.publicUrl);
          }
 
@@ -183,9 +225,15 @@ export default function SellScreen() {
          if (category === 'other' && customCategory.trim()) {
             tags.push(`Môn học: ${customCategory.trim()}`);
          }
+         // Tag giá trị cộng thêm
+         if (hasHighlight) tags.push("Có Highlight");
+         if (hasOldExams) tags.push("Có Đề thi cũ");
+         if (hasMindmap) tags.push("Kèm Mindmap");
+         if (hasNotes) tags.push("Có Ghi chú tổng hợp");
+         if (hasSolutions) tags.push("Có Lời giải chi tiết");
 
-          // 4. Xác định category
-          const dbCategory = category === 'other' ? null : category;
+          // 4. Xác định category - chỉ dùng ID hợp lệ, tránh FK violation
+          const dbCategory = (!category || category === 'other') ? null : category;
 
           // 5. Insert DB
           const { data: insertData, error } = await supabase
@@ -199,8 +247,9 @@ export default function SellScreen() {
                 condition: condition,
                 price: numericPrice,
                 original_price: null,
-                images: uploadedUrls,
-                status: status,
+                 images: uploadedUrls,
+                 image: uploadedUrls[0] || null,
+                 status: status,
                 author: author.trim() || null,
                 publisher: publisher.trim() || null,
                 edition: edition.trim() || null,
@@ -331,6 +380,40 @@ export default function SellScreen() {
                {errors.condition && <p className="text-red-500 text-xs mt-2">{errors.condition}</p>}
             </div>
 
+            {/* Quét mã ISBN / Barcode */}
+            <div className="mb-6 p-4 bg-teal-50/50 border border-teal-100 rounded-lg">
+               <label className="font-bold text-teal-800 text-sm block mb-2">📖 Quét mã ISBN / Barcode</label>
+               <p className="text-xs text-teal-600 mb-3">Nhập mã ISBN (10-13 số) để tự động điền thông tin sách từ Google Books.</p>
+               <div className="flex gap-2">
+                  <input
+                     type="text"
+                     value={isbn}
+                     onChange={e => setIsbn(e.target.value.replace(/\D/g, ""))}
+                     maxLength={13}
+                     className="vinted-input flex-1"
+                     placeholder="VD: 978604..."
+                  />
+                  <button
+                     type="button"
+                     onClick={() => fetchBookByISBN(isbn)}
+                     disabled={isbnLoading}
+                     className="px-4 py-2 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2"
+                  >
+                     {isbnLoading ? (
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                     ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                     )}
+                     {isbnLoading ? "Đang tra..." : "Tra cứu"}
+                  </button>
+               </div>
+            </div>
+
             {/* Thông tin mở rộng - Luôn hiển thị vì là form chuyên sách */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-4 border-t border-slate-100">
                <div>
@@ -411,6 +494,35 @@ export default function SellScreen() {
                   <p className="text-xs text-slate-500">Cho phép người mua đề xuất mức giá thấp hơn mức giá niêm yết của bạn.</p>
                </div>
             </label>
+
+            {/* Tag giá trị cộng thêm */}
+            <div className="mt-5 pt-5 border-t border-slate-100">
+               <label className="font-bold text-slate-900 text-sm block mb-3">Giá trị cộng thêm (tùy chọn)</label>
+               <p className="text-xs text-slate-500 mb-3">Chọn các đặc điểm giúp sách của bạn có giá trị hơn với người mua.</p>
+               <div className="flex flex-wrap gap-2">
+                  {[
+                     { id: 'highlight', label: '🖍️ Có Highlight', state: hasHighlight, setState: setHasHighlight },
+                     { id: 'old_exams', label: '📝 Có Đề thi cũ', state: hasOldExams, setState: setHasOldExams },
+                     { id: 'mindmap', label: '🧠 Kèm Mindmap', state: hasMindmap, setState: setHasMindmap },
+                     { id: 'notes', label: '📋 Có Ghi chú tổng hợp', state: hasNotes, setState: setHasNotes },
+                     { id: 'solutions', label: '✅ Có Lời giải chi tiết', state: hasSolutions, setState: setHasSolutions },
+                  ].map(tag => (
+                     <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => tag.setState(!tag.state)}
+                        className={`px-3 py-2 rounded-full border text-sm font-medium transition-all ${
+                           tag.state
+                              ? 'bg-teal-700 text-white border-teal-700 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-teal-500'
+                        }`}
+                     >
+                        {tag.state && <span className="mr-1">✓</span>}
+                        {tag.label}
+                     </button>
+                  ))}
+               </div>
+            </div>
          </div>
 
          {/* KHỐI 4: Giao dịch & Đăng tin */}

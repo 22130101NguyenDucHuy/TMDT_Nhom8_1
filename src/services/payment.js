@@ -66,7 +66,6 @@ export async function processWalletPayment(transactionId) {
 
   // amount được lưu dạng string trong schema — parse về number
   const totalAmount = Number(txn.amount) || 0;
-  const netAmount = Number(txn.net_amount) || 0;
 
   const { data: buyerWallet, error: walletErr } = await supabase
     .from('lb_wallets')
@@ -77,6 +76,7 @@ export async function processWalletPayment(transactionId) {
   if (!buyerWallet) throw new Error('Không tìm thấy ví người mua');
   if ((buyerWallet.balance || 0) < totalAmount) throw new Error('Số dư không đủ');
 
+  // ESCROW: Trừ tiền người mua, KHÔNG cộng cho người bán ngay
   const { error: deductErr } = await supabase
     .from('lb_wallets')
     .update({
@@ -86,6 +86,44 @@ export async function processWalletPayment(transactionId) {
     .eq('user_id', txn.buyer_id);
   if (deductErr) throw deductErr;
 
+  // Cập nhật trạng thái giao dịch thành "escrow" (đang giữ tiền)
+  const { data: updatedTxn, error: updateErr } = await supabase
+    .from('lb_transactions')
+    .update({
+      status: 'pending', // Giữ pending, is_completed = false để đánh dấu đang escrow
+      is_completed: false,
+      payment_method: 'wallet',
+      notes: (txn.notes || '') + '|escrow:locked',
+    })
+    .eq('id', transactionId)
+    .select()
+    .single();
+  if (updateErr) throw updateErr;
+
+  return updatedTxn;
+}
+
+/**
+ * Giải ngân Escrow — Người mua xác nhận đã nhận đúng sách
+ * Tiền được chuyển từ hệ thống (đã trừ từ ví người mua) sang ví người bán
+ */
+export async function releaseEscrow(transactionId) {
+  const { data: txn, error: txnError } = await supabase
+    .from('lb_transactions')
+    .select('*')
+    .eq('id', transactionId)
+    .single();
+  if (txnError) throw txnError;
+  if (txn.status !== 'pending' || txn.is_completed) {
+    throw new Error('Giao dịch không hợp lệ hoặc đã được xử lý');
+  }
+  if (txn.payment_method !== 'wallet') {
+    throw new Error('Chỉ áp dụng cho giao dịch thanh toán bằng ví');
+  }
+
+  const netAmount = Number(txn.net_amount) || 0;
+
+  // Cộng tiền vào ví người bán
   const { data: sellerWallet, error: sellerWalletErr } = await supabase
     .from('lb_wallets')
     .select('*')
@@ -104,13 +142,13 @@ export async function processWalletPayment(transactionId) {
     if (creditErr) throw creditErr;
   }
 
+  // Cập nhật trạng thái giao dịch thành completed
   const { data: updatedTxn, error: updateErr } = await supabase
     .from('lb_transactions')
     .update({
       status: 'completed',
       is_completed: true,
       completed_at: new Date().toISOString(),
-      payment_method: 'wallet',
     })
     .eq('id', transactionId)
     .select()
@@ -179,6 +217,45 @@ export async function withdrawWallet(userId, amount, bankInfo = {}) {
   }]).maybeSingle();
 
   return withdrawId;
+}
+
+/**
+ * Khởi khiếu nại đơn hàng — Người mua khiếu nại trong vòng 48h
+ * Chuyển trạng thái giao dịch sang disputed, chặn giải ngân
+ */
+export async function openDispute(transactionId, reason = '') {
+  const { data: txn, error: txnError } = await supabase
+    .from('lb_transactions')
+    .select('*')
+    .eq('id', transactionId)
+    .single();
+  if (txnError) throw txnError;
+
+  // Kiểm tra thời gian khiếu nại (trong vòng 48h)
+  const txnTime = new Date(txn.completed_at || txn.created_at);
+  const now = new Date();
+  const hoursDiff = (now - txnTime) / (1000 * 60 * 60);
+  if (hoursDiff > 48) {
+    throw new Error('Đã quá thời hạn khiếu nại (48h). Vui lòng liên hệ Admin.');
+  }
+
+  // Chỉ cho phép khiếu nại khi giao dịch chưa bị hủy/refunded
+  if (['cancelled', 'refunded', 'disputed'].includes(txn.status)) {
+    throw new Error('Giao dịch này không thể khiếu nại');
+  }
+
+  const { data: updatedTxn, error: updateErr } = await supabase
+    .from('lb_transactions')
+    .update({
+      status: 'disputed',
+      notes: (txn.notes || '') + `|dispute:${reason}|dispute_at:${new Date().toISOString()}`,
+    })
+    .eq('id', transactionId)
+    .select()
+    .single();
+  if (updateErr) throw updateErr;
+
+  return updatedTxn;
 }
 
 export function getPaymentMethods() {
