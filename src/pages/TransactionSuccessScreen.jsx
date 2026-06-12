@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { formatPrice } from "../utils/formatters";
 import { useAuth } from "../contexts/AuthContext";
+import { checkPayOSPaymentStatus } from "../services/payment";
 
 const STATUS_CONFIG = {
   pending:       { label: "Chờ người bán xác nhận", color: "bg-yellow-100 text-yellow-700", icon: "⏳" },
@@ -65,7 +66,28 @@ export default function TransactionSuccessScreen() {
         setLoading(false);
       }
     };
-    fetchData();
+
+    // Check query params for PayOS return status
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    const orderCode = params.get('orderCode');
+
+    if (status && orderCode) {
+      const verifyPayment = async () => {
+        setLoading(true);
+        try {
+          await checkPayOSPaymentStatus(orderCode);
+        } catch (err) {
+          console.error("Lỗi xác thực thanh toán:", err);
+        } finally {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          fetchData();
+        }
+      };
+      verifyPayment();
+    } else {
+      fetchData();
+    }
   }, [id, userData]);
 
   if (!userData) {
@@ -152,6 +174,7 @@ export default function TransactionSuccessScreen() {
         <div className="p-5 space-y-2.5 text-sm">
           <Row label="Phương thức thanh toán" value={
             txn.payment_method === "wallet" ? "Ví LoopBook"
+            : txn.payment_method === "payos" ? "Cổng thanh toán PayOS (VietQR)"
             : txn.payment_method === "cash" ? "Tiền mặt (COD)"
             : txn.payment_method === "bank_transfer" ? "Chuyển khoản ngân hàng"
             : txn.payment_method || "—"

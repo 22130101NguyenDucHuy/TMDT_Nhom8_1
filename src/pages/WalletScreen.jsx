@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
-import { depositWallet, withdrawWallet } from "../services/payment";
+import { depositWallet, withdrawWallet, createPayOSDepositLink, checkPayOSPaymentStatus } from "../services/payment";
 
 export default function WalletScreen() {
   const { userData, showToast } = useAuth();
@@ -19,7 +19,7 @@ export default function WalletScreen() {
   const [accountNumber, setAccountNumber] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("chuyen_khoan");
+  const [paymentMethod, setPaymentMethod] = useState("payos");
   const [showPaymentGateway, setShowPaymentGateway] = useState(false);
 
   const banks = [
@@ -55,7 +55,35 @@ export default function WalletScreen() {
         setLoading(false);
       }
     };
-    fetchWallet();
+
+    // Check query params for PayOS return status
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    const orderCode = params.get('orderCode');
+
+    if (status && orderCode) {
+      const verifyPayment = async () => {
+        setShowPaymentGateway(true);
+        try {
+          const checkRes = await checkPayOSPaymentStatus(orderCode);
+          if (checkRes.status === 'PAID') {
+            showToast("Nạp tiền thành công qua PayOS!", "success");
+          } else {
+            showToast(`Thanh toán thất bại hoặc đã bị hủy (Trạng thái: ${checkRes.status})`, "error");
+          }
+        } catch (err) {
+          console.error("Lỗi xác thực thanh toán:", err);
+          showToast("Có lỗi xảy ra khi xác thực giao dịch.", "error");
+        } finally {
+          setShowPaymentGateway(false);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          fetchWallet();
+        }
+      };
+      verifyPayment();
+    } else {
+      fetchWallet();
+    }
   }, [userData]);
 
   const handleDeposit = async () => {
@@ -65,21 +93,39 @@ export default function WalletScreen() {
       return;
     }
     setShowDeposit(false);
-    setShowPaymentGateway(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setSubmitting(true);
-    try {
-      await depositWallet(userData.id, amount);
-      showToast(`Nạp thành công ${formatPrice(amount)} vào ví!`, "success");
-      setDepositAmount("");
-      const { data: w } = await supabase.from("lb_wallets").select("*").eq("user_id", userData.id).maybeSingle();
-      setWallet(w);
-    } catch (err) {
-      showToast(err.message || "Nạp tiền thất bại", "error");
-    } finally {
-      setSubmitting(false);
-      setShowPaymentGateway(false);
-      setPaymentMethod("chuyen_khoan");
+    
+    if (paymentMethod === "payos") {
+      setShowPaymentGateway(true);
+      setSubmitting(true);
+      try {
+        const res = await createPayOSDepositLink(userData.id, amount);
+        if (res && res.checkoutUrl) {
+          window.location.href = res.checkoutUrl;
+        } else {
+          throw new Error("Không nhận được liên kết thanh toán");
+        }
+      } catch (err) {
+        showToast(err.message || "Nạp tiền thất bại", "error");
+        setShowPaymentGateway(false);
+        setSubmitting(false);
+      }
+    } else {
+      setShowPaymentGateway(true);
+      await new Promise(r => setTimeout(r, 2000));
+      setSubmitting(true);
+      try {
+        await depositWallet(userData.id, amount);
+        showToast(`Nạp thành công ${formatPrice(amount)} vào ví!`, "success");
+        setDepositAmount("");
+        const { data: w } = await supabase.from("lb_wallets").select("*").eq("user_id", userData.id).maybeSingle();
+        setWallet(w);
+      } catch (err) {
+        showToast(err.message || "Nạp tiền thất bại", "error");
+      } finally {
+        setSubmitting(false);
+        setShowPaymentGateway(false);
+        setPaymentMethod("payos");
+      }
     }
   };
 
@@ -269,10 +315,10 @@ export default function WalletScreen() {
               <p className="text-sm font-semibold text-slate-700 mb-2">Chọn phương thức thanh toán</p>
               <div className="space-y-2">
                 {[
-                  { value: "chuyen_khoan", label: "Chuyển khoản ngân hàng" },
-                  { value: "the_tin_dung", label: "Thẻ tín dụng/ghi nợ" },
-                  { value: "momo", label: "Ví Momo" },
-                  { value: "vietqr", label: "VietQR" },
+                  { value: "payos", label: "Cổng thanh toán PayOS (VietQR)" },
+                  { value: "chuyen_khoan", label: "Chuyển khoản ngân hàng (Mock)" },
+                  { value: "the_tin_dung", label: "Thẻ tín dụng/ghi nợ (Mock)" },
+                  { value: "momo", label: "Ví Momo (Mock)" },
                 ].map(m => (
                   <label key={m.value} className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:border-teal-500 hover:bg-teal-50 transition-colors cursor-pointer has-[:checked]:border-teal-600 has-[:checked]:bg-teal-50">
                     <input type="radio" name="paymentMethod" value={m.value} checked={paymentMethod === m.value} onChange={() => setPaymentMethod(m.value)} className="accent-teal-700" />

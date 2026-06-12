@@ -117,8 +117,8 @@ export async function releaseEscrow(transactionId) {
   if (txn.status !== 'pending' || txn.is_completed) {
     throw new Error('Giao dịch không hợp lệ hoặc đã được xử lý');
   }
-  if (txn.payment_method !== 'wallet') {
-    throw new Error('Chỉ áp dụng cho giao dịch thanh toán bằng ví');
+  if (txn.payment_method !== 'wallet' && txn.payment_method !== 'payos') {
+    throw new Error('Chỉ áp dụng cho giao dịch thanh toán bằng ví hoặc PayOS');
   }
 
   const netAmount = Number(txn.net_amount) || 0;
@@ -261,7 +261,81 @@ export async function openDispute(transactionId, reason = '') {
 export function getPaymentMethods() {
   return [
     { id: 'wallet', label: 'Ví LoopBook', description: 'Thanh toán bằng số dư trong ví' },
+    { id: 'payos', label: 'Cổng thanh toán PayOS (VietQR)', description: 'Quét mã QR bằng ứng dụng ngân hàng' },
     { id: 'cash', label: 'Tiền mặt', description: 'Thanh toán khi gặp mặt trực tiếp' },
     { id: 'bank_transfer', label: 'Chuyển khoản', description: 'Chuyển khoản ngân hàng' },
   ];
+}
+
+const BACKEND_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+
+export async function createPayOSDepositLink(userId, amount) {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/payment/create-payment-link`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId,
+        amount,
+        type: 'deposit',
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Lỗi khi tạo liên kết nạp tiền');
+    return data;
+  } catch (err) {
+    console.error('createPayOSDepositLink error:', err);
+    throw err;
+  }
+}
+
+export async function createPayOSCheckoutLink(bookId, buyerId, checkoutOptions = {}) {
+  try {
+    const {
+      deliveryMethod = 'meet',
+      deliveryAddress = '',
+      buyerName = '',
+      buyerPhone = '',
+      deliveryFee = 0,
+      amount, // Tổng thanh toán
+    } = checkoutOptions;
+
+    const response = await fetch(`${BACKEND_URL}/api/payment/create-payment-link`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: buyerId,
+        amount,
+        type: 'checkout',
+        bookId,
+        buyerName,
+        buyerPhone,
+        deliveryAddress,
+        deliveryMethod,
+        deliveryFee,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Lỗi khi tạo liên kết mua sách');
+    return data;
+  } catch (err) {
+    console.error('createPayOSCheckoutLink error:', err);
+    throw err;
+  }
+}
+
+export async function checkPayOSPaymentStatus(orderCode) {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/payment/check-payment/${orderCode}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Lỗi khi kiểm tra trạng thái thanh toán');
+    return data;
+  } catch (err) {
+    console.error('checkPayOSPaymentStatus error:', err);
+    throw err;
+  }
 }

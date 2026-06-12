@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
-import { createTransaction, processWalletPayment } from "../services/payment";
+import { createTransaction, processWalletPayment, createPayOSCheckoutLink } from "../services/payment";
 import { getMeetupSpots, getDefaultMeetupSpots } from "../utils/campusMeetup";
 
 // ─── Cấu hình phương thức vận chuyển ───────────────────────────────────────
@@ -38,6 +38,12 @@ const PAYMENT_METHODS = [
     label: "Ví LoopBook",
     description: "Thanh toán bằng số dư trong ví",
     icon: "💳",
+  },
+  {
+    id: "payos",
+    label: "Cổng thanh toán PayOS (VietQR)",
+    description: "Quét mã QR bằng ứng dụng ngân hàng",
+    icon: "⚡",
   },
   {
     id: "cash",
@@ -132,6 +138,23 @@ export default function CheckoutScreen() {
 
     setSubmitting(true);
     try {
+      if (paymentMethod === "payos") {
+        const res = await createPayOSCheckoutLink(bookId, user.id, {
+          deliveryMethod,
+          deliveryAddress: buyerAddress,
+          buyerName,
+          buyerPhone,
+          deliveryFee,
+          amount: totalAmount,
+        });
+        if (res && res.checkoutUrl) {
+          window.location.href = res.checkoutUrl;
+        } else {
+          throw new Error("Không nhận được liên kết thanh toán");
+        }
+        return;
+      }
+
       const txn = await createTransaction(bookId, user.id, {
         paymentMethod,
         deliveryMethod,

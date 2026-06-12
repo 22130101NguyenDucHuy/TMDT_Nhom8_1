@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { formatPrice } from "../../utils/formatters";
-import { createTransaction, processWalletPayment } from "../../services/payment";
+import { createTransaction, processWalletPayment, createPayOSCheckoutLink } from "../../services/payment";
 import { getMeetupSpots, getDefaultMeetupSpots } from "../../utils/campusMeetup";
 
 const DELIVERY_METHODS = [
@@ -14,6 +14,7 @@ const DELIVERY_METHODS = [
 
 const PAYMENT_METHODS = [
   { id: "wallet", label: "Ví LoopBook", description: "Thanh toán bằng số dư trong ví" },
+  { id: "payos", label: "Cổng thanh toán PayOS (VietQR)", description: "Quét mã QR bằng ứng dụng ngân hàng" },
   { id: "cash", label: "Tiền mặt (COD)", description: "Thanh toán khi gặp mặt hoặc nhận hàng" },
   { id: "bank_transfer", label: "Chuyển khoản ngân hàng", description: "Chuyển khoản trước khi giao dịch" },
 ];
@@ -73,6 +74,24 @@ export default function QuickCheckoutModal({ book, onClose }) {
 
     setSubmitting(true);
     try {
+      if (paymentMethod === "payos") {
+        const res = await createPayOSCheckoutLink(book.id, user.id, {
+          deliveryMethod,
+          deliveryAddress: buyerAddress,
+          buyerName,
+          buyerPhone,
+          deliveryFee,
+          amount: totalAmount,
+        });
+        onClose();
+        if (res && res.checkoutUrl) {
+          window.location.href = res.checkoutUrl;
+        } else {
+          throw new Error("Không nhận được liên kết thanh toán");
+        }
+        return;
+      }
+
       const txn = await createTransaction(book.id, user.id, {
         paymentMethod,
         deliveryMethod,

@@ -149,7 +149,7 @@ export default function MyTransactionsScreen() {
                 {transactions.map((txn) => {
                   const status = statusConfig[txn.status] || { label: txn.status, color: "bg-slate-100 text-slate-600" };
                   const isBuyer = txn.buyer_id === userData.id;
-                  const isPendingWallet = txn.status === 'pending' && txn.payment_method === 'wallet' && !txn.is_completed;
+                  const isPendingWallet = txn.status === 'pending' && (txn.payment_method === 'wallet' || txn.payment_method === 'payos') && !txn.is_completed;
                   const showConfirmBtn = isBuyer && isPendingWallet;
                   return (
                     <tr key={txn.id} className="hover:bg-slate-50 transition-colors">
