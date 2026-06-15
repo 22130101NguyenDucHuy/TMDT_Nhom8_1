@@ -13,6 +13,10 @@ export default function PremiumScreen() {
   const [paymentMethod, setPaymentMethod] = useState("wallet");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [bankTransferInfo, setBankTransferInfo] = useState(null);
+  const [showBankInfo, setShowBankInfo] = useState(false);
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [cardInfo, setCardInfo] = useState({ number: "", name: "", exp: "", cvv: "" });
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -45,6 +49,24 @@ export default function PremiumScreen() {
     if (!user) { showToast("Vui lòng đăng nhập", "error"); return; }
     if (!userData?.id) { showToast("Không tìm thấy thông tin người dùng", "error"); return; }
     if (!selected) { showToast("Vui lòng chọn gói dịch vụ", "error"); return; }
+
+    if (paymentMethod === "bank") {
+      setBankTransferInfo({
+        bank: "Vietcombank - CN Hồ Chí Minh",
+        accountNumber: "1234 5678 9012",
+        accountHolder: "LOOPBOOK COMPANY",
+        amount: selected.price,
+        content: `TTDV ${selected.id} ${user.id}`,
+      });
+      setShowBankInfo(true);
+      return;
+    }
+
+    if (paymentMethod === "card") {
+      setShowCardForm(true);
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (paymentMethod === "wallet") {
@@ -83,6 +105,30 @@ export default function PremiumScreen() {
       if (promoErr) throw promoErr;
 
       showToast(`Đã kích hoạt gói "${selected.name}" thành công!`, "success");
+    } catch (err) {
+      showToast(err.message || "Thanh toán thất bại", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCardPayment = async () => {
+    if (!cardInfo.number || !cardInfo.name || !cardInfo.exp || !cardInfo.cvv) {
+      showToast("Vui lòng nhập đầy đủ thông tin thẻ", "error");
+      return;
+    }
+    setShowCardForm(false);
+    setSubmitting(true);
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + (selected.id === "combo" || selected.id === "combo14" ? 14 : 7));
+      const { error: promoErr } = await supabase.from("lb_listing_promotions").insert([{
+        user_id: userData.id, plan_type: selected.id, amount_paid: selected.price,
+        payment_ref: `card_${Date.now()}`, is_active: true, expires_at: expiresAt.toISOString(),
+      }]);
+      if (promoErr) throw promoErr;
+      showToast(`Đã kích hoạt gói "${selected.name}" qua thẻ thành công!`, "success");
     } catch (err) {
       showToast(err.message || "Thanh toán thất bại", "error");
     } finally {
@@ -217,10 +263,59 @@ export default function PremiumScreen() {
                   Sẽ được sử dụng gói này bao lâu?
                   <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
                 </summary>
-                <p className="mt-3 text-sm text-slate-600">Gói Premium của bạn sẽ có hiệu lực trong 30 ngày kể từ ngày kích hoạt. Sau đó, bạn có thể gia hạn hoặc chọn gói khác.</p>
+                <p className="mt-3 text-sm text-slate-600">Gói dịch vụ sẽ có hiệu lực trong 7 ngày (gói thường) hoặc 14 ngày (gói combo) kể từ khi kích hoạt. Sau đó, bạn có thể gia hạn hoặc chọn gói khác.</p>
               </details>
             </div>
           </div>
+
+          {/* Bank Transfer Info Modal */}
+          {showBankInfo && bankTransferInfo && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowBankInfo(false)}>
+              <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Thông tin chuyển khoản</h3>
+                  <button onClick={() => setShowBankInfo(false)} className="text-slate-400 hover:text-slate-600">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4 space-y-3 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-500">Ngân hàng</span><span className="font-semibold">{bankTransferInfo.bank}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Số tài khoản</span><span className="font-semibold">{bankTransferInfo.accountNumber}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Chủ tài khoản</span><span className="font-semibold">{bankTransferInfo.accountHolder}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Số tiền</span><span className="font-bold text-teal-700">{formatPrice(bankTransferInfo.amount)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Nội dung CK</span><span className="font-semibold text-teal-600">{bankTransferInfo.content}</span></div>
+                </div>
+                <p className="text-xs text-slate-500 mt-4">Sau khi chuyển khoản, vui lòng chờ 5-15 phút để hệ thống xác nhận. Gói dịch vụ sẽ được kích hoạt tự động.</p>
+                <button onClick={() => setShowBankInfo(false)} className="w-full mt-4 py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold transition-colors">Đã hiểu</button>
+              </div>
+            </div>
+          )}
+
+          {/* Card Payment Modal */}
+          {showCardForm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCardForm(false)}>
+              <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Thanh toán thẻ tín dụng</h3>
+                  <button onClick={() => setShowCardForm(false)} className="text-slate-400 hover:text-slate-600">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <div><label className="block text-sm font-semibold text-slate-700 mb-1">Số thẻ</label><input type="text" value={cardInfo.number} onChange={e => setCardInfo(p => ({ ...p, number: e.target.value.replace(/\D/g, "").slice(0, 16) }))} className="vinted-input" placeholder="1234 5678 9012 3456" /></div>
+                  <div><label className="block text-sm font-semibold text-slate-700 mb-1">Chủ thẻ</label><input type="text" value={cardInfo.name} onChange={e => setCardInfo(p => ({ ...p, name: e.target.value }))} className="vinted-input" placeholder="NGUYEN VAN A" /></div>
+                  <div className="flex gap-3">
+                    <div className="flex-1"><label className="block text-sm font-semibold text-slate-700 mb-1">HSD (MM/YY)</label><input type="text" value={cardInfo.exp} onChange={e => setCardInfo(p => ({ ...p, exp: e.target.value.replace(/\D/g, "").replace(/(\d{2})(\d)/, "$1/$2").slice(0, 5) }))} className="vinted-input" placeholder="12/28" /></div>
+                    <div className="flex-1"><label className="block text-sm font-semibold text-slate-700 mb-1">CVV</label><input type="text" value={cardInfo.cvv} onChange={e => setCardInfo(p => ({ ...p, cvv: e.target.value.replace(/\D/g, "").slice(0, 3) }))} className="vinted-input" placeholder="123" /></div>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <button onClick={() => setShowCardForm(false)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold rounded-lg text-sm transition-colors">Hủy</button>
+                  <button onClick={handleCardPayment} disabled={submitting} className="flex-1 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-lg text-sm transition-colors disabled:opacity-50">{submitting ? "Đang xử lý..." : "Thanh toán"}</button>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </Page>

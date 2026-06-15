@@ -48,7 +48,7 @@ export function AuthProvider({ children }) {
       // Tìm user bằng id (lb_users.id = auth.users.id)
       const { data, error } = await supabase
         .from('lb_users')
-        .select('*')
+        .select('id, name, email, phone, avatar_url, role, status, rating_sum, rating_count, created_at')
         .eq('id', authUser.id)
         .maybeSingle();
       if (data) {
@@ -65,7 +65,7 @@ export function AuthProvider({ children }) {
       // Kiểm tra đã có record chưa
       const { data: existing } = await supabase
         .from('lb_users')
-        .select('*')
+        .select('id, name, email, role, avatar_url')
         .eq('id', authUser.id)
         .maybeSingle();
       
@@ -77,7 +77,7 @@ export function AuthProvider({ children }) {
         const name = authUser.user_metadata?.full_name || email.split('@')[0] || 'Người dùng';
         const { data: newUser, error } = await supabase
           .from('lb_users')
-          .insert([{ id: authUser.id, name, email }])
+          .insert([{ id: authUser.id, name, email, role: 'user' }])
           .select()
           .single();
         
@@ -87,7 +87,7 @@ export function AuthProvider({ children }) {
           // Thử lấy lại nếu trùng khóa (trigger tạo trước)
           const { data: byId } = await supabase
             .from('lb_users')
-            .select('*')
+            .select('id, name, email, role, avatar_url')
             .eq('id', authUser.id)
             .maybeSingle();
           if (byId) {
@@ -95,7 +95,7 @@ export function AuthProvider({ children }) {
           } else {
             const { data: byEmail } = await supabase
               .from('lb_users')
-              .select('*')
+              .select('id, name, email, role, avatar_url')
               .eq('email', email)
               .maybeSingle();
             activeUser = byEmail;
@@ -128,33 +128,29 @@ export function AuthProvider({ children }) {
       }
     };
 
-    // Lấy session hiện tại
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) ensureUserRecord(session.user);
-      setLoading(false);
-    });
+    // UI render ngay, không cần chờ auth
+    setLoading(false);
 
-    // Lắng nghe thay đổi trạng thái auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Lắng nghe thay đổi trạng thái auth — callback sync, async xử lý qua .then()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
-      // Nếu user vừa đăng nhập bằng OAuth → kiểm tra email .edu.vn
-      if (session?.user && oauthInProgress.current) {
-        oauthInProgress.current = false;
-        const email = session.user.email || '';
-        if (!EDU_EMAIL_REGEX.test(email)) {
-          await supabase.auth.signOut();
-          showToast('Chỉ sinh viên có email @*.edu.vn mới được phép đăng nhập bằng tài khoản trường.', 'error');
-          return;
+      if (session?.user) {
+        // OAuth edu check
+        if (oauthInProgress.current) {
+          oauthInProgress.current = false;
+          const email = session.user.email || '';
+          if (!EDU_EMAIL_REGEX.test(email)) {
+            supabase.auth.signOut();
+            showToast('Chỉ sinh viên có email @*.edu.vn mới được phép đăng nhập bằng tài khoản trường.', 'error');
+            return;
+          }
         }
+        ensureUserRecord(session.user).catch(err => console.error('[Auth] ensureUserRecord error:', err));
+      } else {
+        setUserData(null);
       }
-
-      if (session?.user) ensureUserRecord(session.user);
-      else setUserData(null);
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -197,6 +193,7 @@ export function AuthProvider({ children }) {
   const signOut = async () => {
     setUserData(null);
     await supabase.auth.signOut();
+    window.location.href = '/';
   };
 
   const updateProfile = async (data) => {
@@ -252,7 +249,12 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      <style>{`@keyframes auth-spin { to { transform: rotate(360deg); } }`}</style>
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'white' }}>
+          <div style={{ width: 48, height: 48, border: '4px solid #e2e8f0', borderTopColor: '#0f766e', borderRadius: '50%', animation: 'auth-spin 0.8s linear infinite' }} />
+        </div>
+      ) : children}
       
       {/* Toast Notification */}
       {toast.visible && (

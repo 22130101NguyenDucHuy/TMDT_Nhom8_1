@@ -64,7 +64,7 @@ function formatUserForDisplay(u) {
 
 export async function getUsers(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_users').select('*', { count: 'exact' });
+    let query = supabase.from('lb_users').select('id, name, email, phone, avatar_url, role, status, rating_sum, rating_count, created_at', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.role) query = query.eq('role', filters.role);
     if (filters.search) {
@@ -387,7 +387,8 @@ export async function updateDisputeStatus(disputeId, status, resolutionNote, res
     const updates = { status, updated_at: new Date().toISOString() };
     if (resolutionNote) updates.resolution_note = resolutionNote;
     if (resolvedBy) updates.resolved_by = resolvedBy;
-    if (['resolved_buyer', 'resolved_seller', 'resolved_partial', 'dismissed'].includes(status)) updates.resolved_at = new Date().toISOString();
+    if (['resolved', 'resolved_buyer', 'resolved_seller', 'resolved_partial', 'dismissed'].includes(status)) updates.resolved_at = new Date().toISOString();
+    if (status === 'open') updates.resolved_at = null;
     const { data, error } = await supabase.from('lb_disputes').update(updates).eq('id', disputeId).select();
     if (error) throw error;
     return data[0];
@@ -399,23 +400,106 @@ export async function updateDisputeStatus(disputeId, status, resolutionNote, res
   }
 }
 
+// ── Dispute conversation chat ────────────────────────────────────────────
+
+export async function getDisputeMessages(dispute) {
+  try {
+    const { data: txn, error: txnErr } = await supabase
+      .from('lb_transactions')
+      .select('book_id')
+      .eq('id', dispute.transaction_id)
+      .single();
+    if (txnErr) throw txnErr;
+    const bookId = txn?.book_id;
+    if (!bookId) return [];
+
+    const sorted = [dispute.buyer_id, dispute.seller_id].sort();
+    const convId = `${sorted[0]}_${sorted[1]}_${bookId}`;
+
+    const { data, error } = await supabase
+      .from('lb_messages')
+      .select('*, sender:sender_id(id, name, avatar_url)')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn('getDisputeMessages fallback:', err?.message);
+    return [];
+  }
+}
+
+export async function sendAdminMessage(dispute, adminId, adminName, text) {
+  try {
+    const { data: txn, error: txnErr } = await supabase
+      .from('lb_transactions')
+      .select('book_id')
+      .eq('id', dispute.transaction_id)
+      .single();
+    if (txnErr) throw txnErr;
+    const bookId = txn?.book_id;
+    if (!bookId) return false;
+
+    const sorted = [dispute.buyer_id, dispute.seller_id].sort();
+    const convId = `${sorted[0]}_${sorted[1]}_${bookId}`;
+    const msgText = `[Admin - ${adminName}] ${text}`;
+    const now = new Date().toISOString();
+
+    // Insert for both buyer and seller so both see it in their sidebar
+    await supabase.from('lb_messages').insert([
+      { conversation_id: convId, sender_id: adminId, receiver_id: dispute.buyer_id, book_id: bookId, text: msgText, message_type: 'text', created_at: now },
+      { conversation_id: convId, sender_id: adminId, receiver_id: dispute.seller_id, book_id: bookId, text: msgText, message_type: 'text', created_at: now },
+    ]);
+
+    return true;
+  } catch (err) {
+    console.warn('sendAdminMessage error:', err?.message);
+    throw err;
+  }
+}
+
+export async function reopenDispute(disputeId) {
+  return updateDisputeStatus(disputeId, 'open');
+}
+
 // ============================================================================
 // REPORTS
 // ============================================================================
 
 export async function getReports(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_reports').select('*, reporter:reporter_id(id, name)', { count: 'exact' });
+    let query = supabase.from('lb_reports').select('id, reporter_id, target_type, target_id, report_type, description, status, created_at', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.type) query = query.eq('report_type', filters.type);
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
+
+    // Manual lookup: reporter names + book titles (no FK dependency)
+    const userIds = [...new Set((data || []).map(r => r.reporter_id).filter(Boolean))];
+    const listingIds = (data || []).filter(r => r.target_type === 'listing').map(r => r.target_id);
+
+    const [userResult, bookResult] = await Promise.all([
+      userIds.length > 0
+        ? supabase.from('lb_users').select('id, name').in('id', userIds)
+        : Promise.resolve({ data: [] }),
+      listingIds.length > 0
+        ? supabase.from('lb_books').select('id, title').in('id', listingIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const userMap = {};
+    (userResult.data || []).forEach(u => { userMap[u.id] = u.name; });
+    const bookMap = {};
+    (bookResult.data || []).forEach(b => { bookMap[b.id] = b.title; });
+
     const enriched = (data || []).map(r => ({
       ...r,
-      reporter_name: r.reporter?.name || '—',
+      reporter_name: userMap[r.reporter_id] || '—',
       report_date: r.created_at?.split('T')[0],
+      listing_title: r.target_type === 'listing' ? (bookMap[r.target_id] || 'Đã bị xóa') : null,
     }));
     return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
@@ -433,6 +517,7 @@ export async function updateReportStatus(reportId, status, actionTaken, handledB
     if (actionTaken) updates.action_taken = actionTaken;
     if (handledBy) updates.handled_by = handledBy;
     if (['resolved', 'dismissed', 'reviewed'].includes(status)) updates.handled_at = new Date().toISOString();
+    if (status === 'open') updates.handled_at = null;
     const { data, error } = await supabase.from('lb_reports').update(updates).eq('id', reportId).select();
     if (error) throw error;
     return data[0];
@@ -442,6 +527,10 @@ export async function updateReportStatus(reportId, status, actionTaken, handledB
     if (r) { r.status = status; return r; }
     throw err;
   }
+}
+
+export async function reopenReport(reportId) {
+  return updateReportStatus(reportId, 'open');
 }
 
 // ============================================================================
@@ -559,18 +648,16 @@ export async function getAnalytics(filters = {}) {
 }
 
 export async function getCategoryStats() {
-  // Đếm số sách active theo từng category trực tiếp từ lb_books
   try {
     const { data, error } = await supabase
-      .from('lb_books')
-      .select('category')
-      .eq('status', 'active');
+      .from('lb_category_book_counts')
+      .select('category, count');
     if (error) throw error;
     const map = {};
-    (data || []).forEach(b => {
-      if (b.category) map[b.category] = (map[b.category] || 0) + 1;
+    (data || []).forEach(row => {
+      map[row.category] = row.count;
     });
-    return map; // { "kinh-te": 12, "luat": 5, ... }
+    return map;
   } catch (err) {
     console.warn('getCategoryStats fallback:', err?.message);
     return {};
@@ -583,8 +670,8 @@ export async function getDashboardStats() {
       supabase.from('lb_users').select('*', { count: 'exact', head: true }),
       supabase.from('lb_books').select('*', { count: 'exact', head: true }),
       supabase.from('lb_transactions').select('*', { count: 'exact', head: true }),
-      supabase.from('lb_disputes').select('*', { count: 'exact', head: true }),
-      supabase.from('lb_reports').select('*', { count: 'exact', head: true }),
+      supabase.from('lb_disputes').select('*', { count: 'exact', head: true }).neq('status', 'resolved'),
+      supabase.from('lb_reports').select('*', { count: 'exact', head: true }).eq('status', 'open'),
       supabase.from('lb_listing_promotions').select('*', { count: 'exact', head: true }).eq('is_active', true),
     ]);
     return {
@@ -601,8 +688,8 @@ export async function getDashboardStats() {
       totalUsers: MOCK.users.length,
       totalListings: MOCK.listings.length,
       totalTransactions: MOCK.transactions.length,
-      totalDisputes: MOCK.disputes.length,
-      totalReports: MOCK.reports.length,
+      totalDisputes: MOCK.disputes.filter(d => d.status !== 'resolved').length,
+      totalReports: MOCK.reports.filter(r => r.status === 'open').length,
       totalPremium: 0,
     };
   }
@@ -614,7 +701,7 @@ export async function getDashboardStats() {
 
 export async function getSetting(key) {
   try {
-    const { data, error } = await supabase.from('lb_settings').select('*').eq('key', key).single();
+    const { data, error } = await supabase.from('lb_settings').select('value').eq('key', key).single();
     if (error) throw error;
     return data?.value || null;
   } catch (err) {
@@ -696,24 +783,31 @@ export async function updateComplaintStatus(complaintId, status, resolutionNote,
 
 export async function getPromotions(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_listing_promotions').select('*', { count: 'exact' });
+    let query = supabase.from('lb_listing_promotions').select('id, book_id, user_id, is_active, created_at', { count: 'exact' });
     if (filters.is_active !== undefined) query = query.eq('is_active', filters.is_active);
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
-    const enriched = await Promise.all((data || []).map(async (p) => {
-      let book_title = '—';
-      if (p.book_id) {
-        const { data: book } = await supabase.from('lb_books').select('title').eq('id', p.book_id).maybeSingle();
-        if (book) book_title = book.title;
-      }
-      let user_name = '—';
-      if (p.user_id) {
-        const { data: u } = await supabase.from('lb_users').select('name').eq('id', p.user_id).maybeSingle();
-        if (u) user_name = u.name;
-      }
-      return { ...p, book_title, user_name };
+    const bookIds = (data || []).map(p => p.book_id).filter(Boolean);
+    const userIds = (data || []).map(p => p.user_id).filter(Boolean);
+
+    const [{ data: books }, { data: users }] = await Promise.all([
+      bookIds.length > 0
+        ? supabase.from('lb_books').select('id, title').in('id', bookIds)
+        : Promise.resolve({ data: [] }),
+      userIds.length > 0
+        ? supabase.from('lb_users').select('id, name').in('id', userIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const bookMap = Object.fromEntries((books || []).map(b => [b.id, b.title]));
+    const userMap = Object.fromEntries((users || []).map(u => [u.id, u.name]));
+
+    const enriched = (data || []).map(p => ({
+      ...p,
+      book_title: bookMap[p.book_id] || '—',
+      user_name: userMap[p.user_id] || '—',
     }));
     return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
@@ -755,7 +849,7 @@ export async function updateFeeConfig(id, updates) {
 
 export async function getNotifications(userId, filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_notifications').select('*', { count: 'exact' }).eq('user_id', userId);
+    let query = supabase.from('lb_notifications').select('id, type, title, body, is_read, created_at', { count: 'exact' }).eq('user_id', userId);
     if (filters.is_read !== undefined) query = query.eq('is_read', filters.is_read);
     if (filters.type) query = query.eq('type', filters.type);
     const from = (page - 1) * perPage;
@@ -782,13 +876,31 @@ export async function markNotificationRead(notificationId) {
 
 export async function getVerifications(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_student_verifications').select('*, user:user_id(id, name, email)', { count: 'exact' });
+    let query = supabase.from('lb_student_verifications').select('id, user_id, status, created_at', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
     const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
     if (error) throw error;
-    return { data: data || [], total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
+
+    // Manual user lookup (no FK dependency)
+    const userIds = [...new Set((data || []).map(r => r.user_id).filter(Boolean))];
+    let userMap = {};
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('lb_users')
+        .select('id, name, email')
+        .in('id', userIds);
+      (users || []).forEach(u => { userMap[u.id] = u; });
+    }
+
+    const enriched = (data || []).map(r => ({
+      ...r,
+      user_name: userMap[r.user_id]?.name || '—',
+      user_email: userMap[r.user_id]?.email || '—',
+      submitted_date: r.created_at?.split('T')[0],
+    }));
+    return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
   } catch (err) {
     console.warn('getVerifications fallback:', err?.message);
     return { data: [], total: 0, page, perPage, totalPages: 1 };

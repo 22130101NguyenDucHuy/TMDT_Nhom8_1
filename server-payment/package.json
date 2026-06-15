@@ -1,0 +1,17 @@
+{
+  "name": "server-payment",
+  "version": "1.0.0",
+  "description": "PayOS payment processing server for LoopBook",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "@payos/node": "^2.0.5",
+    "@supabase/supabase-js": "^2.107.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
