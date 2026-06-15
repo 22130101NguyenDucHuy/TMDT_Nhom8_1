@@ -15,7 +15,6 @@ const CheckoutScreen         = lazy(() => import("../../pages/CheckoutScreen"));
 const TransactionSuccessScreen = lazy(() => import("../../pages/TransactionSuccessScreen"));
 const MyTransactionsScreen   = lazy(() => import("../../pages/MyTransactionsScreen"));
 const PremiumScreen          = lazy(() => import("../../pages/PremiumScreen"));
-const TransactionsScreen     = lazy(() => import("../../pages/TransactionsScreen"));
 const DashboardScreen        = lazy(() => import("../../pages/DashboardScreen"));
 const ProfileScreen          = lazy(() => import("../../pages/ProfileScreen"));
 const FavoritesScreen        = lazy(() => import("../../pages/FavoritesScreen"));
@@ -38,6 +37,7 @@ export default function AppShell() {
     const titles = {
       "/": "LoopBook – Mua bán sách sinh viên",
       "/kham-pha": "Khám phá tài liệu",
+      "/sach": "Danh sách tài liệu | LoopBook",
       "/dang-ban": "Đăng bán tài liệu",
       "/tin-nhan": "Tin nhắn",
       "/vi-tien": "Ví tiền",
@@ -63,6 +63,7 @@ export default function AppShell() {
           <Routes>
             <Route element={<HomeScreen />}               path="/" />
             <Route element={<ExploreScreen />}            path="/kham-pha" />
+            <Route element={<ExploreScreen />}            path="/sach" />
             <Route element={<BookDetailScreen />}         path="/sach/:bookId" />
             <Route element={<SellScreen />}               path="/dang-ban" />
             <Route element={<EditListingScreen />}        path="/sua-bai/:bookId" />

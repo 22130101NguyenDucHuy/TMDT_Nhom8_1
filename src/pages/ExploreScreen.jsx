@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import BookCard from "../components/common/BookCard";
-import { getBookImageUrl, resolveBookImages } from "../utils/imageResolver";
+import { resolveBookImages } from "../utils/imageResolver";
 
 const PAGE_SIZE = 12;
 
@@ -27,10 +27,8 @@ const categoryMeta = {
   "y-hoc":                { label: "Y học",                  icon: "🏥" },
 };
 
-// Normalize book data từ Supabase
 const normalizeBook = (b) => {
   const imgs = resolveBookImages(b.id, b.images);
-
   return {
     ...b,
     images: imgs,
@@ -45,18 +43,27 @@ const normalizeBook = (b) => {
   };
 };
 
+// ── Skeleton card ─────────────────────────────────────────────────────────
+const SkeletonCard = () => (
+  <div className="animate-pulse">
+    <div className="aspect-[3/4] bg-slate-200 rounded-lg mb-3" />
+    <div className="h-3 bg-slate-200 rounded w-4/5 mb-2" />
+    <div className="h-3 bg-slate-200 rounded w-2/3 mb-2" />
+    <div className="h-4 bg-slate-200 rounded w-1/3" />
+  </div>
+);
+
 export default function ExploreScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [books, setBooks]             = useState([]);
-  const [categories, setCategories]   = useState([]);
+  const [books, setBooks]           = useState([]);
+  const [categories, setCategories] = useState([]);
   const [categoryCounts, setCategoryCounts] = useState({});
-  const [loading, setLoading]         = useState(true);      // lần đầu
-  const [loadingMore, setLoadingMore] = useState(false);     // load thêm
-  const [hasMore, setHasMore]         = useState(true);
-  const [page, setPage]               = useState(0);
+  const [loading, setLoading]       = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
 
-  // Khởi tạo từ URL params (q=... và danh-muc=...)
+  const getPage = () => Math.max(1, parseInt(searchParams.get("page")) || 1);
+
   const [searchQuery, setSearchQuery]           = useState(() => searchParams.get("q") || "");
   const selectedCategory                        = searchParams.get("danh-muc") || "all";
   const [selectedSchool, setSelectedSchool]     = useState("all");
@@ -64,10 +71,9 @@ export default function ExploreScreen() {
   const [sortBy, setSortBy]                     = useState("newest");
   const [schoolQuery, setSchoolQuery]           = useState("");
 
-  // Ref cho sentinel element (Intersection Observer)
-  const sentinelRef = useRef(null);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const page = getPage();
 
-  // ── Build Supabase query theo filter/sort hiện tại ─────────────────────
   const buildQuery = useCallback((from, to) => {
     let q = supabase
       .from("lb_books")
@@ -76,7 +82,7 @@ export default function ExploreScreen() {
         images, urgent, verified, school, category,
         created_at, seller_id,
         seller:seller_id (name, rating_sum, rating_count)
-      `)
+      `, { count: "exact" })
       .eq("status", "active")
       .range(from, to);
 
@@ -95,72 +101,45 @@ export default function ExploreScreen() {
     return q;
   }, [searchQuery, selectedCategory, selectedSchool, selectedPrice, sortBy]);
 
-  // ── Fetch lần đầu (hoặc khi filter thay đổi) ──────────────────────────
-  useEffect(() => {
-    const fetchInitial = async () => {
-      setLoading(true);
-      setBooks([]);
-      setPage(0);
-      setHasMore(true);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setBooks([]);
 
-      const [booksResult, catsResult, countResult] = await Promise.all([
-        buildQuery(0, PAGE_SIZE - 1),
-        supabase.from("lb_categories").select("*").order("order", { ascending: true }),
-        supabase.from("lb_books").select("category").eq("status", "active"),
+    try {
+      const from = (page - 1) * PAGE_SIZE;
+      const to   = from + PAGE_SIZE - 1;
+
+      const [booksResult, catsResult, cntResult] = await Promise.all([
+        buildQuery(from, to),
+        supabase.from("lb_categories").select("id, name, slug, accent, \"order\", is_active").order("order", { ascending: true }),
+        supabase.from("lb_category_book_counts").select("category, count"),
       ]);
 
       if (booksResult.data) {
         setBooks(booksResult.data.map(normalizeBook));
-        setHasMore(booksResult.data.length === PAGE_SIZE);
       }
+
+      if (booksResult.count != null) setTotalCount(booksResult.count);
+      else console.warn('[Explore] booksResult (no count):', booksResult);
+
       if (catsResult.data) setCategories(catsResult.data);
-      if (countResult.data) {
+      if (cntResult.data) {
         const counts = {};
-        for (const b of countResult.data) {
-          if (b.category) counts[b.category] = (counts[b.category] || 0) + 1;
+        for (const row of cntResult.data) {
+          if (row.category) counts[row.category] = row.count;
         }
         setCategoryCounts(counts);
       }
-      setLoading(false);
-    };
-    fetchInitial();
-  }, [buildQuery]);
-
-  // ── Load thêm trang tiếp theo ──────────────────────────────────────────
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    const from = nextPage * PAGE_SIZE;
-    const to   = from + PAGE_SIZE - 1;
-
-    const { data } = await buildQuery(from, to);
-    if (data) {
-      setBooks((prev) => [...prev, ...data.map(normalizeBook)]);
-      setPage(nextPage);
-      setHasMore(data.length === PAGE_SIZE);
+    } catch (err) {
+      console.error('[Explore] fetchData error:', err);
     }
-    setLoadingMore(false);
-  }, [buildQuery, loadingMore, hasMore, page]);
+    setLoading(false);
+  }, [buildQuery, page]);
 
-  // ── Intersection Observer: tự load khi scroll đến sentinel ────────────
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) loadMore();
-      },
-      { rootMargin: "200px" } // bắt đầu load trước 200px
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [loadMore]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Danh sách trường (từ sách đã load) ───────────────────────────────
   const allSchools = useMemo(() => {
-    const schools = [...new Set(books.map((b) => b.school).filter(Boolean))];
-    return schools.sort();
+    return [...new Set(books.map((b) => b.school).filter(Boolean))].sort();
   }, [books]);
 
   const filteredSchools = allSchools.filter((s) =>
@@ -168,14 +147,19 @@ export default function ExploreScreen() {
   );
 
   const getCatCount = (catId) => categoryCounts[catId] || 0;
-
   const hasFilter = selectedCategory !== "all" || selectedSchool !== "all" || selectedPrice !== 0 || searchQuery.trim() !== "";
 
-  const updateCategory = (catId) => {
+  const navTo = (params) => {
     const next = new URLSearchParams(searchParams);
-    if (catId === "all") next.delete("danh-muc");
-    else next.set("danh-muc", catId);
+    for (const [k, v] of Object.entries(params)) {
+      if (v == null || v === "" || v === "all" || (v === 1 || v === "1") && k === "page") next.delete(k);
+      else next.set(k, String(v));
+    }
     setSearchParams(next);
+  };
+
+  const updateCategory = (catId) => {
+    navTo({ "danh-muc": catId === "all" ? null : catId, page: null });
   };
 
   const resetAll = () => {
@@ -186,15 +170,8 @@ export default function ExploreScreen() {
     setSearchQuery("");
   };
 
-  // ── Skeleton cards ────────────────────────────────────────────────────
-  const SkeletonCard = () => (
-    <div className="animate-pulse">
-      <div className="aspect-[3/4] bg-slate-200 rounded-lg mb-3" />
-      <div className="h-3 bg-slate-200 rounded w-4/5 mb-2" />
-      <div className="h-3 bg-slate-200 rounded w-2/3 mb-2" />
-      <div className="h-4 bg-slate-200 rounded w-1/3" />
-    </div>
-  );
+  const from = (page - 1) * PAGE_SIZE + 1;
+  const to   = Math.min(page * PAGE_SIZE, totalCount);
 
   return (
     <div className="py-6 flex flex-col lg:flex-row gap-8">
@@ -210,7 +187,6 @@ export default function ExploreScreen() {
             )}
           </div>
 
-          {/* Search box */}
           <div className="relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -219,17 +195,16 @@ export default function ExploreScreen() {
               type="text"
               placeholder="Tìm kiếm tài liệu..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); navTo({ page: null }); }}
               className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-200 bg-white transition-colors"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setSearchQuery(""); navTo({ page: null }); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             )}
           </div>
 
-          {/* Danh mục */}
           <div className="bg-white border border-slate-100 rounded-xl p-4">
             <h3 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wide">Danh mục ngành</h3>
             <ul className="space-y-2">
@@ -256,7 +231,6 @@ export default function ExploreScreen() {
 
           <div className="border-t border-slate-100" />
 
-          {/* Trường học */}
           <div className="bg-white border border-slate-100 rounded-xl p-4">
             <h3 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wide">Trường đại học</h3>
             <div className="relative mb-3">
@@ -264,11 +238,11 @@ export default function ExploreScreen() {
               <input type="text" placeholder="Tìm trường..." value={schoolQuery} onChange={(e) => setSchoolQuery(e.target.value)} className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-200 bg-white transition-colors" />
             </div>
             <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
-              <button onClick={() => setSelectedSchool("all")} className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all border ${selectedSchool === "all" ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
+              <button onClick={() => { setSelectedSchool("all"); navTo({ page: null }); }} className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all border ${selectedSchool === "all" ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
                 Tất cả trường
               </button>
               {filteredSchools.map((school) => (
-                <button key={school} onClick={() => setSelectedSchool(selectedSchool === school ? "all" : school)} className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all leading-snug border ${selectedSchool === school ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
+                <button key={school} onClick={() => { setSelectedSchool(selectedSchool === school ? "all" : school); navTo({ page: null }); }} className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all leading-snug border ${selectedSchool === school ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
                   {school}
                 </button>
               ))}
@@ -277,13 +251,12 @@ export default function ExploreScreen() {
 
           <div className="border-t border-slate-100" />
 
-          {/* Khoảng giá */}
           <div className="bg-white border border-slate-100 rounded-xl p-4">
             <h3 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wide">Khoảng giá</h3>
             <ul className="space-y-2">
               {PRICE_PRESETS.map((preset, idx) => (
                 <li key={idx}>
-                  <button onClick={() => setSelectedPrice(idx)} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all border ${selectedPrice === idx ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
+                  <button onClick={() => { setSelectedPrice(idx); navTo({ page: null }); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all border ${selectedPrice === idx ? "bg-teal-50 text-teal-700 border-teal-200" : "text-slate-600 hover:bg-slate-50 border-transparent"}`}>
                     {preset.label}
                   </button>
                 </li>
@@ -295,7 +268,6 @@ export default function ExploreScreen() {
 
       {/* ── Danh sách sách ── */}
       <main className="flex-1 min-w-0">
-        {/* Filter tags */}
         {hasFilter && (
           <div className="flex flex-wrap gap-2 mb-5 pb-4 border-b border-slate-100">
             {selectedCategory !== "all" && (
@@ -308,7 +280,7 @@ export default function ExploreScreen() {
             {selectedSchool !== "all" && (
               <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-semibold rounded-full border border-teal-200">
                 🏫 {selectedSchool}
-                <button onClick={() => setSelectedSchool("all")} className="ml-0.5 hover:text-teal-900">✕</button>
+                <button onClick={() => { setSelectedSchool("all"); navTo({ page: null }); }} className="ml-0.5 hover:text-teal-900">✕</button>
               </span>
             )}
             {selectedPrice !== 0 && (
@@ -320,17 +292,16 @@ export default function ExploreScreen() {
           </div>
         )}
 
-        {/* Header + sort */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
           <h1 className="text-lg font-bold text-slate-900">
-            {loading ? "Đang tải…" : `${books.length}${hasMore ? "+" : ""} tài liệu`}
+            {loading ? "Đang tải…" : !totalCount ? "Không có tài liệu" : `${totalCount} tài liệu`}
             {selectedCategory !== "all" && (
               <span className="font-normal text-slate-500 text-base"> · {categoryMeta[selectedCategory]?.label}</span>
             )}
           </h1>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500 font-medium hidden sm:inline">Sắp xếp:</span>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="border border-slate-200 rounded-lg bg-white px-3 py-2 font-medium text-slate-700 focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-200 text-sm cursor-pointer transition-colors hover:border-slate-300">
+            <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); navTo({ page: null }); }} className="border border-slate-200 rounded-lg bg-white px-3 py-2 font-medium text-slate-700 focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-200 text-sm cursor-pointer transition-colors hover:border-slate-300">
               <option value="newest">Mới nhất</option>
               <option value="price_asc">Giá thấp → cao</option>
               <option value="price_desc">Giá cao → thấp</option>
@@ -338,9 +309,7 @@ export default function ExploreScreen() {
           </div>
         </div>
 
-        {/* Grid sách */}
         {loading ? (
-          // Skeleton loading lần đầu
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-10">
             {Array.from({ length: PAGE_SIZE }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
@@ -357,19 +326,38 @@ export default function ExploreScreen() {
               {books.map((book) => (
                 <BookCard key={book.id} book={book} />
               ))}
-
-              {/* Skeleton cards khi đang load thêm */}
-              {loadingMore && Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={`more-${i}`} />
-              ))}
             </div>
 
-            {/* Sentinel — Intersection Observer bắt element này */}
-            <div ref={sentinelRef} className="h-10 mt-6 flex items-center justify-center">
-              {!hasMore && books.length > 0 && (
-                <p className="text-xs text-slate-400 font-medium">Đã hiển thị tất cả tài liệu</p>
-              )}
-            </div>
+            {/* ── Phân trang ── */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-10">
+                <button
+                  onClick={() => navTo({ page: page - 1 })}
+                  disabled={page <= 1}
+                  className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ‹ Trước
+                </button>
+
+                <span className="px-4 py-2 text-sm text-slate-600">
+                  Trang {page} / {totalPages}
+                </span>
+
+                <button
+                  onClick={() => navTo({ page: page + 1 })}
+                  disabled={page >= totalPages}
+                  className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Sau ›
+                </button>
+              </div>
+            )}
+
+            {totalPages <= 1 && totalCount > 0 && (
+              <div className="flex items-center justify-center mt-10">
+                <p className="text-xs text-slate-400 font-medium">Đã hiển thị tất cả {totalCount} tài liệu</p>
+              </div>
+            )}
           </>
         )}
       </main>

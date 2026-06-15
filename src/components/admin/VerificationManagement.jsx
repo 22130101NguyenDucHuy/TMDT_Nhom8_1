@@ -63,6 +63,7 @@ export default function VerificationManagement() {
 
   const getImageUrl = (path) => {
     if (!path) return "";
+    if (path.startsWith("http")) return path;
     const { data } = supabase.storage.from("student-verification").getPublicUrl(path);
     return data.publicUrl;
   };

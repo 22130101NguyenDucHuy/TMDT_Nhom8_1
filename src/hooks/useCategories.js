@@ -12,7 +12,7 @@ export function useCategories() {
         setLoading(true);
         const { data, error: err } = await supabase
           .from('lb_categories')
-          .select('*')
+          .select('id, name, slug, accent, "order", is_active')
           .eq('is_active', true)
           .order('order', { ascending: true });
         

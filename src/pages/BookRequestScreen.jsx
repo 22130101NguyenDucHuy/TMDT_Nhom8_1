@@ -280,8 +280,8 @@ export default function BookRequestScreen() {
                       <p className="text-sm text-slate-600 mt-2 line-clamp-2">{req.description}</p>
                     )}
                     <div className="flex items-center gap-2 mt-3">
-                      <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-xs font-bold">
-                        {req.requester?.name?.charAt(0) || "?"}
+                      <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center text-teal-500 flex-shrink-0">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                       </div>
                       <span className="text-xs text-slate-500">
                         {req.requester?.name || "Người dùng"} · {new Date(req.created_at).toLocaleDateString("vi-VN")}

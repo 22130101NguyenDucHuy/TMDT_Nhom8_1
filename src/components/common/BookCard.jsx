@@ -6,7 +6,6 @@ import { getBookImageUrl } from "../../utils/imageResolver";
 export default function BookCard({ book }) {
   const imgSrc = getBookImageUrl(book);
   const sellerName = book.seller?.name || "Người bán";
-  const sellerInitial = sellerName.charAt(0).toUpperCase();
   const displayName = sellerName.split(" ").pop();
   const urgency = book.urgent;
   const cat = book.category ? getCategoryMeta(book.category) : null;
@@ -32,8 +31,8 @@ export default function BookCard({ book }) {
           </div>
         )}
         <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full shadow-sm">
-          <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-[9px] flex-shrink-0">
-            {sellerInitial}
+          <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-500 flex items-center justify-center flex-shrink-0">
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
           </div>
           <span className="text-[11px] text-slate-700 font-medium truncate max-w-[70px]">
             {displayName}

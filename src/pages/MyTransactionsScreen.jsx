@@ -74,7 +74,7 @@ export default function MyTransactionsScreen() {
     }
     setDisputeLoading(true);
     try {
-      await openDispute(disputeTxnId, disputeReason.trim());
+      await openDispute(disputeTxnId, userData.id, disputeReason.trim());
       showToast("Đã gửi khiếu nại! Admin sẽ xem xét trong thời gian sớm nhất.", "success");
       setDisputeTxnId(null);
       setDisputeReason("");
@@ -93,7 +93,8 @@ export default function MyTransactionsScreen() {
   };
 
   const canDispute = (txn) => {
-    if (txn.buyer_id !== userData.id) return false;
+    const isParticipant = txn.buyer_id === userData.id || txn.seller_id === userData.id;
+    if (!isParticipant) return false;
     if (['cancelled', 'refunded', 'disputed'].includes(txn.status)) return false;
     const txnTime = new Date(txn.completed_at || txn.created_at);
     const hoursDiff = (new Date() - txnTime) / (1000 * 60 * 60);
@@ -238,7 +239,7 @@ export default function MyTransactionsScreen() {
             </div>
             <div className="p-6">
               <p className="text-sm text-slate-600 mb-4">
-                Vui lòng mô tả chi tiết vấn đề bạn gặp phải. Khiếu nại chỉ có hiệu lực trong vòng <strong>48 giờ</strong> kể từ khi giao dịch được tạo.
+                Mô tả chi tiết vấn đề bạn gặp phải. Cả người mua và người bán đều có thể khiếu nại trong vòng <strong>48 giờ</strong> kể từ khi giao dịch được tạo.
               </p>
               <textarea
                 value={disputeReason}
