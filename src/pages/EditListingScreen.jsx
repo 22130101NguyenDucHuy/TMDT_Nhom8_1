@@ -116,7 +116,7 @@ export default function EditListingScreen() {
           title: title.trim(),
           category: category === 'other' ? null : category,
           condition,
-          price: parseInt(price.replace(/,/g, ""), 10),
+          price: parseInt(price.replace(/\D/g, ""), 10),
           author: author.trim() || null,
           publisher: publisher.trim() || null,
           edition: edition.trim() || null,
