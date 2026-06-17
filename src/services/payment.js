@@ -144,6 +144,16 @@ export async function releaseEscrow(transactionId) {
       })
       .eq('user_id', txn.seller_id);
     if (creditErr) throw creditErr;
+  } else {
+    const { error: insertErr } = await supabase
+      .from('lb_wallets')
+      .insert([{
+        user_id: txn.seller_id,
+        balance: netAmount,
+        total_in: netAmount,
+        total_out: 0,
+      }]);
+    if (insertErr) throw insertErr;
   }
 
   // Cập nhật trạng thái giao dịch thành completed
