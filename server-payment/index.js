@@ -188,6 +188,10 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
           status: 'pending',
           is_completed: false,
           payment_method: 'payos',
+          delivery_method: deliveryMethod || 'meet',
+          delivery_address: deliveryAddress || '',
+          buyer_phone: buyerPhone || '',
+          buyer_name: buyerName || 'Khách hàng',
           notes: `payos_order_code:${orderCode}|type:checkout|ship:${deliveryMethod || 'meet'}|addr:${deliveryAddress || ''}|tel:${buyerPhone || ''}`,
           when_time: new Date().toLocaleString('vi-VN'),
         }])

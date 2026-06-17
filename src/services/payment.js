@@ -41,6 +41,10 @@ export async function createTransaction(bookId, buyerId, options = {}) {
       status: paymentMethod === 'wallet' ? 'pending' : 'awaiting_meet',
       is_completed: false,
       payment_method: paymentMethod,
+      delivery_method: deliveryMethod,
+      delivery_address: deliveryAddress,
+      buyer_phone: buyerPhone,
+      buyer_name: buyerName,
       notes: [
         deliveryMethod ? `ship:${deliveryMethod}` : null,
         deliveryAddress ? `addr:${deliveryAddress}` : null,
