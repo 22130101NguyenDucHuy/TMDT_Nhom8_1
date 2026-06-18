@@ -19,6 +19,7 @@ export async function createTransaction(bookId, buyerId, options = {}) {
     .single();
   if (bookError) throw bookError;
 
+  const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const amount = (book.price || 0) + (deliveryFee || 0);
   const feeRate = DEFAULT_FEE_RATE;
   const feeAmount = Math.round((book.price || 0) * feeRate / 100);
@@ -27,7 +28,7 @@ export async function createTransaction(bookId, buyerId, options = {}) {
   const { data, error } = await supabase
     .from('lb_transactions')
     .insert([{
-      // Không set id — để DB tự sinh UUID
+      id: transactionId,
       book: book.title,
       partner: buyerName,
       book_id: bookId,
@@ -56,6 +57,37 @@ export async function createTransaction(bookId, buyerId, options = {}) {
     .single();
 
   if (error) throw error;
+
+  // Gửi tin nhắn tự động thông báo đặt mua tài liệu qua kênh chat
+  try {
+    const sorted = [buyerId, book.seller_id].sort();
+    const convId = `${sorted[0]}_${sorted[1]}_${bookId}`;
+    const pmLabels = {
+      wallet: 'Ví LoopBook (Đang giữ tiền ký quỹ)',
+      payos: 'PayOS (Đang giữ tiền ký quỹ)',
+      cash: 'Tiền mặt (COD - Giao dịch trực tiếp)',
+      bank_transfer: 'Chuyển khoản ngân hàng (Chờ xác nhận)',
+    };
+    const dmLabels = {
+      meet: 'Gặp trực tiếp',
+      ship_fast: 'Giao hàng nhanh',
+      ship_save: 'Giao hàng tiết kiệm',
+    };
+    const pmLabel = pmLabels[paymentMethod] || paymentMethod;
+    const dmLabel = dmLabels[deliveryMethod] || deliveryMethod;
+
+    await supabase.from('lb_messages').insert({
+      conversation_id: convId,
+      sender_id: buyerId,
+      receiver_id: book.seller_id,
+      book_id: bookId,
+      text: `[HỆ THỐNG] Tôi đã đặt mua tài liệu "${book.title}" của bạn.\n- Phương thức thanh toán: ${pmLabel}\n- Hình thức vận chuyển: ${dmLabel}\n- Địa chỉ/Điểm hẹn: ${deliveryAddress || 'Chưa chọn'}\n- Họ tên người nhận: ${buyerName || 'Chưa nhập'}\n- Số điện thoại: ${buyerPhone || 'Chưa nhập'}`,
+      message_type: 'text',
+    });
+  } catch (msgErr) {
+    console.error('Error sending order notification message:', msgErr);
+  }
+
   return data;
 }
 
@@ -394,3 +426,89 @@ export async function checkPayOSPaymentStatus(orderCode) {
     throw err;
   }
 }
+
+export async function cancelTransaction(transactionId, userId) {
+  const { data: txn, error: txnError } = await supabase
+    .from('lb_transactions')
+    .select('*')
+    .eq('id', transactionId)
+    .single();
+  if (txnError) throw txnError;
+
+  // Xác thực người dùng tham gia giao dịch
+  if (txn.buyer_id !== userId && txn.seller_id !== userId) {
+    throw new Error('Bạn không có quyền hủy giao dịch này');
+  }
+
+  // Chỉ cho phép hủy khi đang ở trạng thái pending hoặc awaiting_meet
+  if (!['pending', 'awaiting_meet'].includes(txn.status) || txn.is_completed) {
+    throw new Error('Giao dịch này không thể hủy');
+  }
+
+  const totalAmount = Number(txn.amount) || 0;
+
+  // Hoàn tiền vào ví người mua nếu đã thanh toán qua ví/PayOS (trạng thái pending)
+  if (txn.status === 'pending' && (txn.payment_method === 'wallet' || txn.payment_method === 'payos')) {
+    const { data: buyerWallet, error: walletErr } = await supabase
+      .from('lb_wallets')
+      .select('*')
+      .eq('user_id', txn.buyer_id)
+      .maybeSingle();
+    if (walletErr) throw walletErr;
+
+    if (buyerWallet) {
+      const { error: refundErr } = await supabase
+        .from('lb_wallets')
+        .update({
+          balance: (buyerWallet.balance || 0) + totalAmount,
+          total_out: Math.max(0, (buyerWallet.total_out || 0) - totalAmount),
+        })
+        .eq('user_id', txn.buyer_id);
+      if (refundErr) throw refundErr;
+    } else {
+      const { error: insertErr } = await supabase
+        .from('lb_wallets')
+        .insert([{
+          user_id: txn.buyer_id,
+          balance: totalAmount,
+          total_in: 0,
+          total_out: 0,
+        }]);
+      if (insertErr) throw insertErr;
+    }
+  }
+
+  // Cập nhật trạng thái giao dịch thành đã hủy
+  const { data: updatedTxn, error: updateErr } = await supabase
+    .from('lb_transactions')
+    .update({
+      status: 'cancelled',
+      is_completed: false,
+      updated_at: new Date().toISOString(),
+      notes: (txn.notes || '') + `|cancelled_by:${userId}|cancelled_at:${new Date().toISOString()}`,
+    })
+    .eq('id', transactionId)
+    .select()
+    .single();
+
+  if (updateErr) throw updateErr;
+
+  // Gửi tin nhắn tự động thông báo hủy đơn
+  try {
+    const sorted = [txn.buyer_id, txn.seller_id].sort();
+    const convId = `${sorted[0]}_${sorted[1]}_${txn.book_id}`;
+    await supabase.from('lb_messages').insert({
+      conversation_id: convId,
+      sender_id: userId,
+      receiver_id: userId === txn.buyer_id ? txn.seller_id : txn.buyer_id,
+      book_id: txn.book_id,
+      text: `[HỆ THỐNG] Giao dịch cho tài liệu "${txn.book}" đã bị hủy bởi ${userId === txn.buyer_id ? 'người mua' : 'người bán'}. Số tiền tạm giữ (nếu có) đã được hoàn về ví người mua.`,
+      message_type: 'text',
+    });
+  } catch (msgErr) {
+    console.error('Error sending cancel message:', msgErr);
+  }
+
+  return updatedTxn;
+}
+

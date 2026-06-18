@@ -106,6 +106,22 @@ async function fulfillPayment(orderCode) {
       if (txnUpdateErr) throw txnUpdateErr;
 
       console.log(`[PayOS] Khóa tiền ký quỹ thành công cho giao dịch: ${txn.id}`);
+
+      // Gửi tin nhắn tự động thông báo thanh toán thành công
+      try {
+        const sorted = [txn.buyer_id, txn.seller_id].sort();
+        const convId = `${sorted[0]}_${sorted[1]}_${txn.book_id}`;
+        await supabase.from('lb_messages').insert({
+          conversation_id: convId,
+          sender_id: txn.buyer_id,
+          receiver_id: txn.seller_id,
+          book_id: txn.book_id,
+          text: `[HỆ THỐNG] Tôi đã thanh toán thành công qua PayOS cho tài liệu "${txn.book}". Số tiền đang được tạm giữ an toàn trong Escrow.`,
+          message_type: 'text',
+        });
+      } catch (msgErr) {
+        console.error('Error sending PayOS fulfill message:', msgErr);
+      }
     }
 
     return { success: true, alreadyProcessed: false, txn };
@@ -135,9 +151,11 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
       cancelUrl = `${process.env.APP_URL || 'http://localhost:3000'}/wallet?status=cancelled&orderCode=${orderCode}`;
       returnUrl = `${process.env.APP_URL || 'http://localhost:3000'}/wallet?status=success&orderCode=${orderCode}`;
 
+      txnId = `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const { data: txn, error: txnErr } = await supabase
         .from('lb_transactions')
         .insert([{
+          id: txnId,
           book: 'Nạp tiền ví (PayOS)',
           partner: 'Hệ thống',
           buyer_id: userId,
@@ -157,7 +175,6 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
         .single();
 
       if (txnErr) throw txnErr;
-      txnId = txn.id;
     } else if (type === 'checkout') {
       description = 'Mua sach LoopBook';
 
@@ -172,9 +189,11 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
       const feeAmount = Math.round((book.price || 0) * feeRate / 100);
       const netAmount = (book.price || 0) - feeAmount;
 
+      txnId = `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const { data: txn, error: txnErr } = await supabase
         .from('lb_transactions')
         .insert([{
+          id: txnId,
           book: book.title,
           partner: buyerName || 'Khách hàng',
           book_id: bookId,
@@ -199,7 +218,22 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
         .single();
 
       if (txnErr) throw txnErr;
-      txnId = txn.id;
+
+      // Gửi tin nhắn tự động thông báo đặt mua qua PayOS (chờ thanh toán)
+      try {
+        const sorted = [userId, book.seller_id].sort();
+        const convId = `${sorted[0]}_${sorted[1]}_${bookId}`;
+        await supabase.from('lb_messages').insert({
+          conversation_id: convId,
+          sender_id: userId,
+          receiver_id: book.seller_id,
+          book_id: bookId,
+          text: `[HỆ THỐNG] Tôi đã đặt mua tài liệu "${book.title}" của bạn qua PayOS (Đang chờ thanh toán).\n- Hình thức vận chuyển: ${deliveryMethod === 'meet' ? 'Gặp trực tiếp' : 'Giao hàng'}\n- Địa chỉ/Điểm hẹn: ${deliveryAddress || 'Chưa chọn'}\n- Họ tên người nhận: ${buyerName || 'Khách hàng'}\n- Số điện thoại: ${buyerPhone || 'Chưa nhập'}`,
+          message_type: 'text',
+        });
+      } catch (msgErr) {
+        console.error('Error sending PayOS checkout message:', msgErr);
+      }
       cancelUrl = `${process.env.APP_URL || 'http://localhost:3000'}/checkout/${bookId}?status=cancelled&orderCode=${orderCode}`;
       returnUrl = `${process.env.APP_URL || 'http://localhost:3000'}/transaction/${txnId}/success?status=success&orderCode=${orderCode}`;
     } else {
