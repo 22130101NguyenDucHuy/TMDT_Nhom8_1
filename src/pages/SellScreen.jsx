@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCategories } from "../hooks/useCategories";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
+import VerificationGate from "../components/sell/VerificationGate";
 
 const conditionOptions = [
    { id: "brand_new", label: "Mới 100%" },
@@ -122,18 +123,7 @@ export default function SellScreen() {
       );
    }
 
-    if (userData.status === 'inactive') {
-       return (
-          <div className="max-w-4xl mx-auto py-16 text-center">
-             <div className="inline-flex items-center justify-center w-20 h-20 bg-amber-50 rounded-full mb-6 text-amber-500 shadow-sm">
-                <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-             </div>
-             <h2 className="text-2xl font-bold text-slate-800 mb-4">Tài khoản chưa được kích hoạt</h2>
-             <p className="text-slate-600 mb-6 max-w-md mx-auto">Tài khoản sinh viên của bạn đang chờ phê duyệt thẻ sinh viên để sử dụng tính năng này.</p>
-             <button onClick={() => navigate("/")} className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</button>
-          </div>
-       );
-    }
+
 
     if (userData.status === 'suspended') {
        return (
@@ -362,7 +352,8 @@ export default function SellScreen() {
    };
 
    return (
-      <div className="max-w-4xl mx-auto py-8">
+      <VerificationGate>
+         <div className="max-w-4xl mx-auto py-8">
          <h1 className="text-2xl font-bold text-slate-900 mb-6">Đăng bán tài liệu</h1>
 
          {bookRequest && (
@@ -693,5 +684,6 @@ export default function SellScreen() {
             </button>
          </div>
       </div>
+   </VerificationGate>
    );
 }
