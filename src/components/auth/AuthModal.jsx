@@ -51,11 +51,16 @@ export default function AuthModal() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              is_new_user: true
+            }
+          }
         });
         if (error) throw error;
 
         if (data.user) {
-          const { error: userError } = await supabase.from('lb_users').insert([
+          const { error: userError } = await supabase.from('lb_users').upsert([
             {
               id: data.user.id,
               email: data.user.email,

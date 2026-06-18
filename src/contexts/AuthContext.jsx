@@ -86,6 +86,24 @@ export function AuthProvider({ children }) {
       }
 
       if (activeUser) {
+        // Kiểm tra nếu là tài khoản mới đăng ký để ép ghi đè trạng thái thành 'inactive'
+        // (đề phòng trigger database tự động tạo dòng user với trạng thái mặc định 'active')
+        const isNewUser = authUser.user_metadata?.is_new_user;
+        if (isNewUser) {
+          console.log('[AuthContext] Overriding new user status to inactive...');
+          await supabase
+            .from('lb_users')
+            .update({ status: 'inactive' })
+            .eq('id', authUser.id);
+          
+          activeUser.status = 'inactive';
+          
+          // Xóa flag is_new_user khỏi metadata để không bị reset khi đăng nhập lần sau
+          await supabase.auth.updateUser({
+            data: { is_new_user: null }
+          });
+        }
+
         setUserData(activeUser);
         
         // Kiểm tra và tự động tạo ví nếu chưa có
