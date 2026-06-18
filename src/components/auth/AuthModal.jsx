@@ -67,6 +67,9 @@ export default function AuthModal() {
           if (userError) {
             console.error("Lỗi khi lưu vào bảng lb_users:", userError);
           }
+
+          // Đăng xuất ngay lập tức để giao diện nền phía sau không hiển thị trạng thái đã đăng nhập
+          await supabase.auth.signOut();
         }
 
         setRegisteredUserId(data.user.id);
@@ -112,8 +115,15 @@ export default function AuthModal() {
         ]);
       if (dbError) throw dbError;
 
-      showToast("Ảnh xác thực đã được gửi! Vui lòng chờ xác nhận.", "success");
+      showToast("Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.", "success");
       closeAuthModal();
+      await supabase.auth.signOut();
+      
+      // Reset verification state
+      setVerificationStep(false);
+      setVerificationFile(null);
+      setVerificationPreview(null);
+      setRegisteredUserId(null);
     } catch (err) {
       setError(err.message || "Có lỗi khi tải ảnh lên.");
     } finally {
