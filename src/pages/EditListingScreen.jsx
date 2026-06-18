@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useCategories } from "../hooks/useCategories";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
+import { formatPriceInput } from "../utils/formatters";
 
 const conditionOptions = [
   { id: "brand_new", label: "Mới 100%" },
@@ -51,6 +52,8 @@ export default function EditListingScreen() {
   const [selectedDeliveries, setSelectedDeliveries] = useState(["meet"]);
   const [isUrgent, setIsUrgent] = useState(false);
   const [status, setStatus] = useState("");
+  const [images, setImages] = useState([]);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (!bookId || !user) return;
@@ -75,13 +78,16 @@ export default function EditListingScreen() {
         setEdition(data.edition || "");
         setSchool(data.school || "");
         setYear(data.year ? String(data.year) : "");
-        setPrice(data.price ? String(data.price) : "");
+        setPrice(data.price ? formatPriceInput(data.price) : "");
         setAllowOffers(data.allow_offers !== false);
         setDescription(data.description || "");
         setLocationStr(data.location_text || "");
         setSelectedDeliveries(data.delivery_methods || ["meet"]);
         setIsUrgent(data.urgent || false);
         setStatus(data.status || "");
+        
+        const existingImages = data.images || [];
+        setImages(existingImages.map(url => ({ file: null, preview: url, isExisting: true })));
       } catch (err) {
         showToast("Lỗi tải dữ liệu", "error");
         navigate("/quan-ly");
@@ -92,14 +98,58 @@ export default function EditListingScreen() {
     fetchBook();
   }, [bookId, user]);
 
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (images.length + files.length > 20) {
+      showToast("Chỉ được tải lên tối đa 20 ảnh.", "error");
+      return;
+    }
+    const newImages = files.map(file => ({
+      file,
+      preview: URL.createObjectURL(file),
+      isExisting: false,
+    }));
+    setImages([...images, ...newImages]);
+  };
+
+  const removeImage = (index) => {
+    const newImages = [...images];
+    if (!newImages[index].isExisting) {
+      URL.revokeObjectURL(newImages[index].preview);
+    }
+    newImages.splice(index, 1);
+    setImages(newImages);
+  };
+
   const handleSubmit = async () => {
     if (!title.trim()) { showToast("Vui lòng nhập tiêu đề", "error"); return; }
+    if (images.length === 0) { showToast("Vui lòng tải lên ít nhất 1 ảnh.", "error"); return; }
     if (!category) { showToast("Vui lòng chọn danh mục", "error"); return; }
     if (!condition) { showToast("Vui lòng chọn tình trạng", "error"); return; }
     if (!price) { showToast("Vui lòng nhập giá", "error"); return; }
 
     setSaving(true);
     try {
+      // Upload new images to Supabase Storage
+      const uploadedUrls = [];
+      for (let i = 0; i < images.length; i++) {
+        if (images[i].isExisting) {
+          uploadedUrls.push(images[i].preview);
+        } else {
+          const file = images[i].file;
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${bookId}_${Date.now()}_${i}.${fileExt}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('books')
+            .upload(fileName, file);
+          if (uploadError) throw uploadError;
+
+          const { data: urlData } = supabase.storage.from('books').getPublicUrl(fileName);
+          uploadedUrls.push(urlData.publicUrl);
+        }
+      }
+
       const tags = [];
       if (isUrgent) tags.push("Bán gấp");
       if (allowOffers) tags.push("Cho phép trả giá");
@@ -116,7 +166,7 @@ export default function EditListingScreen() {
           title: title.trim(),
           category: category === 'other' ? null : category,
           condition,
-          price: parseInt(price.replace(/,/g, ""), 10),
+          price: parseInt(price.replace(/\D/g, ""), 10),
           author: author.trim() || null,
           publisher: publisher.trim() || null,
           edition: edition.trim() || null,
@@ -128,6 +178,8 @@ export default function EditListingScreen() {
           delivery_methods: selectedDeliveries,
           urgent: isUrgent,
           tags,
+          images: uploadedUrls,
+          image: uploadedUrls[0] || null,
           status: status === "draft" ? "draft" : "pending",
           updated_at: new Date().toISOString(),
         })
@@ -189,6 +241,43 @@ export default function EditListingScreen() {
 
       <div className="bg-white border border-slate-200 rounded-lg p-6 mb-6 shadow-sm">
         <h2 className="font-bold text-slate-900 text-lg mb-4">Thông tin cơ bản</h2>
+
+        {/* Khối quản lý hình ảnh */}
+        <div className="mb-6">
+          <label className="font-bold text-slate-900 block mb-2">Hình ảnh tài liệu <span className="text-red-500">*</span></label>
+          <p className="text-xs text-slate-500 mb-4">Tải lên tối đa 20 ảnh chất lượng cao để sách của bạn dễ bán hơn.</p>
+
+          {images.length > 0 ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+              {images.map((img, idx) => (
+                <div key={idx} className="relative aspect-square rounded-md overflow-hidden border border-slate-200 group">
+                  <img src={img.preview} alt="preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(idx)}
+                    className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                  {idx === 0 && <span className="absolute bottom-0 left-0 right-0 bg-teal-700/90 text-white text-[10px] font-medium text-center py-1">ẢNH BÌA</span>}
+                </div>
+              ))}
+              {images.length < 20 && (
+                <div onClick={() => fileInputRef.current?.click()} className="aspect-square border-2 border-dashed border-slate-300 rounded-md bg-slate-50 flex items-center justify-center cursor-pointer hover:border-teal-500 transition-colors">
+                  <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 flex flex-col items-center justify-center py-10 px-4 cursor-pointer hover:border-teal-500 hover:bg-teal-50/50 transition-colors">
+              <svg className="w-8 h-8 text-teal-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+              <span className="vinted-btn-outline w-auto px-4 py-1.5 mb-1 text-xs pointer-events-none">Tải ảnh lên</span>
+              <p className="text-[10px] text-slate-500 text-center pointer-events-none">Hoặc kéo thả ảnh vào khu vực này</p>
+            </div>
+          )}
+          <input type="file" multiple accept="image/jpeg, image/png" className="hidden" ref={fileInputRef} onChange={handleImageChange} />
+        </div>
+
         <div className="mb-4">
           <label className="font-bold text-slate-900 block mb-2">Tiêu đề <span className="text-red-500">*</span></label>
           <input type="text" value={title} onChange={e => setTitle(e.target.value)} maxLength={100} className="vinted-input" placeholder="VD: Giáo trình Kinh tế vi mô" />
@@ -255,7 +344,7 @@ export default function EditListingScreen() {
           <label className="font-bold text-teal-800 block mb-2">Giá bán <span className="text-red-500">*</span></label>
           <div className="relative md:w-1/2">
             <span className="absolute right-4 top-3.5 text-teal-800 font-bold">₫</span>
-            <input type="text" value={price} onChange={e => setPrice(e.target.value.replace(/\D/g, "").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1."))}
+            <input type="text" value={price} onChange={e => setPrice(formatPriceInput(e.target.value))}
               className="vinted-input pr-10 text-lg font-bold text-teal-800 border-teal-200" placeholder="0" />
           </div>
         </div>

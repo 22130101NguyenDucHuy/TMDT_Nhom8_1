@@ -63,10 +63,6 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPasswordScreen />} />
 
         {/* Main App Routes */}
-        <Route path="/checkout/:bookId" element={<AppShell />} />
-        <Route path="/transaction/:id/success" element={<AppShell />} />
-        <Route path="/my-transactions" element={<AppShell />} />
-        <Route path="/wallet" element={<AppShell />} />
         <Route path="/*" element={<AppShell />} />
       </Routes>
     </BrowserRouter>

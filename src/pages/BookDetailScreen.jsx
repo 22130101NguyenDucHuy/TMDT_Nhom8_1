@@ -85,7 +85,7 @@ export default function BookDetailScreen() {
       setLoading(true);
       const { data: bookData } = await supabase
         .from("lb_books")
-        .select("id, title, description, condition, price, original_price, images, author, publisher, edition, school, category, status, urgent, verified, tags, view_count, is_sold, created_at, seller_id, seller:seller_id(id, name, rating_sum, rating_count)")
+        .select("id, title, description, condition, price, original_price, images, author, publisher, edition, school, category, status, urgent, verified, tags, view_count, is_sold, created_at, seller_id, allow_offers, seller:seller_id(id, name, rating_sum, rating_count)")
         .eq("id", bookId)
         .single();
       if (bookData) {
@@ -324,9 +324,11 @@ export default function BookDetailScreen() {
             <button onClick={handleBuyNow} className="w-full py-3.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-lg transition-colors text-sm">
               Mua ngay
             </button>
-            <button onClick={() => { if (!requireAuth()) return; setShowOfferBox(!showOfferBox); }} className="w-full py-3 border border-teal-700 text-teal-700 hover:bg-teal-50 font-bold rounded-lg transition-colors text-sm">
-              Trả giá
-            </button>
+            {book.allow_offers !== false && (
+              <button onClick={() => { if (!requireAuth()) return; setShowOfferBox(!showOfferBox); }} className="w-full py-3 border border-teal-700 text-teal-700 hover:bg-teal-50 font-bold rounded-lg transition-colors text-sm">
+                Trả giá
+              </button>
+            )}
           </div>
           )}
           <div className="flex flex-col gap-2.5 mb-5">

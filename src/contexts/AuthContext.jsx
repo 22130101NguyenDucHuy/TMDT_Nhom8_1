@@ -40,45 +40,27 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const fetchUserData = async (authUser) => {
-      if (!authUser) {
-        setUserData(null);
-        return;
-      }
-      // Tìm user bằng id (lb_users.id = auth.users.id)
-      const { data, error } = await supabase
-        .from('lb_users')
-        .select('id, name, email, phone, avatar_url, role, status, rating_sum, rating_count, created_at')
-        .eq('id', authUser.id)
-        .maybeSingle();
-      if (data) {
-        setUserData(data);
-      } else if (error && error.code !== 'PGRST116') {
-        console.warn('fetchUserData error:', error);
-      }
-    };
-
     const ensureUserRecord = async (authUser) => {
       if (!authUser) return;
       
       let activeUser = null;
-      // Kiểm tra đã có record chưa
+      // Kiểm tra đã có record chưa (lấy toàn bộ thông tin bao gồm status và role)
       const { data: existing } = await supabase
         .from('lb_users')
-        .select('id, name, email, role, avatar_url')
+        .select('id, name, email, phone, avatar_url, role, status, rating_sum, rating_count, created_at')
         .eq('id', authUser.id)
         .maybeSingle();
       
       if (existing) {
         activeUser = existing;
       } else {
-        // Chưa có → tạo mới (lb_users.id = auth.users.id)
+        // Chưa có → tạo mới (lb_users.id = auth.users.id) với status mặc định là inactive
         const email = authUser.email || '';
         const name = authUser.user_metadata?.full_name || email.split('@')[0] || 'Người dùng';
         const { data: newUser, error } = await supabase
           .from('lb_users')
-          .insert([{ id: authUser.id, name, email, role: 'user' }])
-          .select()
+          .insert([{ id: authUser.id, name, email, role: 'user', status: 'inactive' }])
+          .select('id, name, email, phone, avatar_url, role, status, rating_sum, rating_count, created_at')
           .single();
         
         if (!error && newUser) {
@@ -87,7 +69,7 @@ export function AuthProvider({ children }) {
           // Thử lấy lại nếu trùng khóa (trigger tạo trước)
           const { data: byId } = await supabase
             .from('lb_users')
-            .select('id, name, email, role, avatar_url')
+            .select('id, name, email, phone, avatar_url, role, status, rating_sum, rating_count, created_at')
             .eq('id', authUser.id)
             .maybeSingle();
           if (byId) {
@@ -95,7 +77,7 @@ export function AuthProvider({ children }) {
           } else {
             const { data: byEmail } = await supabase
               .from('lb_users')
-              .select('id, name, email, role, avatar_url')
+              .select('id, name, email, phone, avatar_url, role, status, rating_sum, rating_count, created_at')
               .eq('email', email)
               .maybeSingle();
             activeUser = byEmail;
@@ -104,6 +86,24 @@ export function AuthProvider({ children }) {
       }
 
       if (activeUser) {
+        // Kiểm tra nếu là tài khoản mới đăng ký để ép ghi đè trạng thái thành 'inactive'
+        // (đề phòng trigger database tự động tạo dòng user với trạng thái mặc định 'active')
+        const isNewUser = authUser.user_metadata?.is_new_user;
+        if (isNewUser) {
+          console.log('[AuthContext] Overriding new user status to inactive...');
+          await supabase
+            .from('lb_users')
+            .update({ status: 'inactive' })
+            .eq('id', authUser.id);
+          
+          activeUser.status = 'inactive';
+          
+          // Xóa flag is_new_user khỏi metadata để không bị reset khi đăng nhập lần sau
+          await supabase.auth.updateUser({
+            data: { is_new_user: null }
+          });
+        }
+
         setUserData(activeUser);
         
         // Kiểm tra và tự động tạo ví nếu chưa có
@@ -128,9 +128,6 @@ export function AuthProvider({ children }) {
       }
     };
 
-    // UI render ngay, không cần chờ auth
-    setLoading(false);
-
     // Lắng nghe thay đổi trạng thái auth — callback sync, async xử lý qua .then()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
@@ -142,14 +139,26 @@ export function AuthProvider({ children }) {
           oauthInProgress.current = false;
           const email = session.user.email || '';
           if (!EDU_EMAIL_REGEX.test(email)) {
-            supabase.auth.signOut();
-            showToast('Chỉ sinh viên có email @*.edu.vn mới được phép đăng nhập bằng tài khoản trường.', 'error');
+            supabase.auth.signOut().then(() => {
+              showToast('Chỉ sinh viên có email @*.edu.vn mới được phép đăng nhập bằng tài khoản trường.', 'error');
+              setSession(null);
+              setUser(null);
+              setUserData(null);
+              setLoading(false);
+            });
             return;
           }
         }
-        ensureUserRecord(session.user).catch(err => console.error('[Auth] ensureUserRecord error:', err));
+        
+        setLoading(true);
+        ensureUserRecord(session.user)
+          .catch(err => console.error('[Auth] ensureUserRecord error:', err))
+          .finally(() => {
+            setLoading(false);
+          });
       } else {
         setUserData(null);
+        setLoading(false);
       }
     });
 

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
-import { releaseEscrow, openDispute } from "../services/payment";
+import { releaseEscrow, openDispute, cancelTransaction } from "../services/payment";
 
 const statusConfig = {
   pending: { label: "Chờ xử lý", color: "bg-yellow-100 text-yellow-700" },
@@ -62,6 +62,28 @@ export default function MyTransactionsScreen() {
       setTransactions(data || []);
     } catch (err) {
       showToast(err.message || "Có lỗi xảy ra khi xác nhận", "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleCancelTransaction = async (txnId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn hủy giao dịch này không? Tiền tạm giữ ký quỹ (nếu có) sẽ được tự động hoàn lại vào ví người mua.")) {
+      return;
+    }
+    setProcessingId(txnId);
+    try {
+      await cancelTransaction(txnId, userData.id);
+      showToast("Đã hủy giao dịch thành công!", "success");
+      // Tải lại danh sách giao dịch
+      const { data } = await supabase
+        .from("lb_transactions")
+        .select("*, book:book_id(title)")
+        .or(`buyer_id.eq.${userData.id},seller_id.eq.${userData.id}`)
+        .order("created_at", { ascending: false });
+      setTransactions(data || []);
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra khi hủy giao dịch", "error");
     } finally {
       setProcessingId(null);
     }
@@ -152,6 +174,7 @@ export default function MyTransactionsScreen() {
                   const isBuyer = txn.buyer_id === userData.id;
                   const isPendingWallet = txn.status === 'pending' && (txn.payment_method === 'wallet' || txn.payment_method === 'payos') && !txn.is_completed;
                   const showConfirmBtn = isBuyer && isPendingWallet;
+                  const showCancelBtn = ['pending', 'awaiting_meet'].includes(txn.status) && !txn.is_completed;
                   return (
                     <tr key={txn.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-4 font-mono text-xs text-slate-500">{txn.id}</td>
@@ -192,6 +215,18 @@ export default function MyTransactionsScreen() {
                                   Xác nhận đã nhận sách
                                 </>
                               )}
+                            </button>
+                          )}
+                          {showCancelBtn && (
+                            <button
+                              onClick={() => handleCancelTransaction(txn.id)}
+                              disabled={processingId === txn.id}
+                              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              Hủy đơn
                             </button>
                           )}
                           {canDispute(txn) && (
