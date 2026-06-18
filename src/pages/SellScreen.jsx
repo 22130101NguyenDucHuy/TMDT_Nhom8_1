@@ -1,5 +1,5 @@
-import { useState, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useRef, useMemo, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCategories } from "../hooks/useCategories";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
@@ -36,6 +36,39 @@ export default function SellScreen() {
    const { user, userData, showToast } = useAuth();
    const navigate = useNavigate();
    const { categories } = useCategories();
+   const [searchParams] = useSearchParams();
+   const requestId = searchParams.get("request");
+   const [bookRequest, setBookRequest] = useState(null);
+
+   useEffect(() => {
+      if (!requestId) return;
+      const fetchRequest = async () => {
+         try {
+            const { data, error } = await supabase
+               .from("lb_book_requests")
+               .select("*, requester:requester_id(id, name)")
+               .eq("id", requestId)
+               .single();
+            if (error) throw error;
+            if (data) {
+               setBookRequest(data);
+               setTitle(data.title || "");
+               setAuthor(data.author || "");
+               setSchool(data.school || "");
+               if (data.condition && data.condition !== "any") {
+                  setCondition(data.condition);
+               }
+               if (data.max_price) {
+                  setPrice(parseInt(String(data.max_price), 10).toLocaleString("en-US"));
+               }
+               setDescription(`Chào hàng cho yêu cầu của ${data.requester?.name || 'người mua'}: "${data.title}"`);
+            }
+         } catch (err) {
+            console.error("Lỗi khi tải yêu cầu sách:", err);
+         }
+      };
+      fetchRequest();
+   }, [requestId]);
 
    // Khối 1: Cơ bản
    const [images, setImages] = useState([]);
@@ -291,6 +324,32 @@ export default function SellScreen() {
 
          if (error) throw error;
 
+         // Link request if exists and is not draft
+         if (status !== 'draft' && requestId && bookRequest) {
+            // 1. Update request status to 'fulfilled'
+            const { error: reqError } = await supabase
+               .from('lb_book_requests')
+               .update({ status: 'fulfilled', updated_at: new Date().toISOString() })
+               .eq('id', requestId);
+            if (reqError) console.error("Error updating request status:", reqError);
+
+            // 2. Create a conversation and send a notification message in chat
+            if (bookRequest.requester_id) {
+               const sorted = [userData.id, bookRequest.requester_id].sort();
+               const convId = `${sorted[0]}_${sorted[1]}_${bookId}`;
+
+               const { error: msgError } = await supabase.from("lb_messages").insert({
+                  conversation_id: convId,
+                  sender_id: userData.id,
+                  receiver_id: bookRequest.requester_id,
+                  book_id: bookId,
+                  text: `Chào bạn, mình có cuốn sách "${title.trim()}" mà bạn đang cần tìm. Mình vừa đăng bán với giá ${numericPrice.toLocaleString("vi-VN")}₫, bạn xem qua nhé!`,
+                  message_type: 'text',
+               });
+               if (msgError) console.error("Error sending offer message:", msgError);
+            }
+         }
+
          showToast(status === 'draft' ? "Đã lưu nháp thành công!" : "Đăng bán thành công!", "success");
          navigate("/quan-ly");
       } catch (err) {
@@ -305,6 +364,21 @@ export default function SellScreen() {
    return (
       <div className="max-w-4xl mx-auto py-8">
          <h1 className="text-2xl font-bold text-slate-900 mb-6">Đăng bán tài liệu</h1>
+
+         {bookRequest && (
+            <div className="mb-6 p-4 bg-teal-50 border border-teal-200 rounded-xl text-teal-800 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-4 duration-300">
+               <svg className="w-5 h-5 shrink-0 mt-0.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+               </svg>
+               <div>
+                  <p className="font-bold text-teal-900">Đăng bán dạng Chào hàng</p>
+                  <p className="mt-0.5">
+                     Bạn đang tạo bài đăng chào hàng cho yêu cầu: <strong>{bookRequest.title}</strong> của sinh viên <strong>{bookRequest.requester?.name || 'Người dùng'}</strong>.
+                     Thông tin yêu cầu đã được tự động điền bên dưới.
+                  </p>
+               </div>
+            </div>
+         )}
 
          {/* KHỐI 1: Trực quan & Cơ bản */}
          <div className={`bg-white border ${errors.images ? 'border-red-400' : 'border-slate-200'} rounded-lg p-6 mb-6 shadow-sm`}>
