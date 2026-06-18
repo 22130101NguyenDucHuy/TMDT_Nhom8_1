@@ -469,17 +469,7 @@ export default function CheckoutScreen() {
             <span>Phí vận chuyển</span>
             <span>{deliveryFee === 0 ? "Miễn phí" : formatPrice(deliveryFee)}</span>
           </div>
-          <div className="flex justify-between text-amber-600">
-            <span className="flex items-center gap-1">
-              Phí bảo chứng ({feeRate}%)
-              <span title="Phí giúp bảo vệ giao dịch và duy trì nền tảng" className="cursor-help text-amber-400">ⓘ</span>
-            </span>
-            <span>-{formatPrice(feeAmount)}</span>
-          </div>
-          <div className="flex justify-between text-emerald-600 text-xs bg-emerald-50 px-2 py-1.5 rounded-lg">
-            <span>Người bán thực nhận</span>
-            <span className="font-semibold">{formatPrice(netAmount)}</span>
-          </div>
+
           <div className="flex justify-between font-extrabold text-base text-slate-900 pt-2 border-t border-slate-100">
             <span>Tổng thanh toán</span>
             <span className="text-teal-700">{formatPrice(totalAmount)}</span>
