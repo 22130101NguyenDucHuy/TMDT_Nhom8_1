@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useCategories } from "../hooks/useCategories";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
+import { formatPriceInput } from "../utils/formatters";
 
 const conditionOptions = [
   { id: "brand_new", label: "Mới 100%" },
@@ -77,7 +78,7 @@ export default function EditListingScreen() {
         setEdition(data.edition || "");
         setSchool(data.school || "");
         setYear(data.year ? String(data.year) : "");
-        setPrice(data.price ? String(data.price) : "");
+        setPrice(data.price ? formatPriceInput(data.price) : "");
         setAllowOffers(data.allow_offers !== false);
         setDescription(data.description || "");
         setLocationStr(data.location_text || "");
@@ -343,7 +344,7 @@ export default function EditListingScreen() {
           <label className="font-bold text-teal-800 block mb-2">Giá bán <span className="text-red-500">*</span></label>
           <div className="relative md:w-1/2">
             <span className="absolute right-4 top-3.5 text-teal-800 font-bold">₫</span>
-            <input type="text" value={price} onChange={e => setPrice(e.target.value.replace(/\D/g, "").replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1."))}
+            <input type="text" value={price} onChange={e => setPrice(formatPriceInput(e.target.value))}
               className="vinted-input pr-10 text-lg font-bold text-teal-800 border-teal-200" placeholder="0" />
           </div>
         </div>

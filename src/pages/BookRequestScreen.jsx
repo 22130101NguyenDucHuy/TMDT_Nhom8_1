@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
-import { formatPrice } from "../utils/formatters";
+import { formatPrice, formatPriceInput } from "../utils/formatters";
 
 const conditionOptions = [
   { id: "any", label: "Bất kỳ" },
@@ -47,8 +47,7 @@ export default function BookRequestScreen() {
   }, []);
 
   const handlePriceChange = (e) => {
-    const raw = e.target.value.replace(/\D/g, "");
-    setMaxPrice(raw ? parseInt(raw, 10).toLocaleString("en-US") : "");
+    setMaxPrice(formatPriceInput(e.target.value));
   };
 
   const handleSubmit = async (e) => {
@@ -64,7 +63,7 @@ export default function BookRequestScreen() {
 
     setLoading(true);
     try {
-      const numericPrice = maxPrice ? parseInt(maxPrice.replace(/,/g, ""), 10) : null;
+      const numericPrice = maxPrice ? parseInt(maxPrice.replace(/\D/g, ""), 10) : null;
       const { error } = await supabase.from("lb_book_requests").insert([
         {
           requester_id: userData.id,

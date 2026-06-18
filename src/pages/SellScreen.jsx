@@ -4,6 +4,7 @@ import { useCategories } from "../hooks/useCategories";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
 import VerificationGate from "../components/sell/VerificationGate";
+import { formatPriceInput } from "../utils/formatters";
 
 const conditionOptions = [
    { id: "brand_new", label: "Mới 100%" },
@@ -60,7 +61,7 @@ export default function SellScreen() {
                   setCondition(data.condition);
                }
                if (data.max_price) {
-                  setPrice(parseInt(String(data.max_price), 10).toLocaleString("en-US"));
+                  setPrice(formatPriceInput(data.max_price));
                }
                setDescription(`Chào hàng cho yêu cầu của ${data.requester?.name || 'người mua'}: "${data.title}"`);
             }
@@ -139,9 +140,7 @@ export default function SellScreen() {
     }
 
    const formatPrice = (value) => {
-      const rawValue = value.replace(/\D/g, "");
-      if (!rawValue) return "";
-      return parseInt(rawValue, 10).toLocaleString("en-US");
+      return formatPriceInput(value);
    };
 
    const handlePriceChange = (e) => setPrice(formatPrice(e.target.value));
@@ -239,7 +238,7 @@ export default function SellScreen() {
       try {
          // 1. Generate UUID-like ID cho bài đăng
           const bookId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`;
-         const numericPrice = price ? parseInt(price.replace(/,/g, ""), 10) : 0;
+         const numericPrice = price ? parseInt(price.replace(/\D/g, ""), 10) : 0;
          const numericYear = year ? parseInt(year, 10) : null;
 
          // 2. Upload TẤT CẢ ảnh lên Storage
