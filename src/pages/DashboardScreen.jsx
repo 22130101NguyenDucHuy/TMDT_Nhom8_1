@@ -10,6 +10,7 @@ const TABS = [
   { key: "pending", label: "Chờ duyệt" },
   { key: "draft",  label: "Nháp"      },
   { key: "sold",   label: "Đã bán"    },
+  { key: "suspended", label: "Đã khóa" },
 ];
 
 const conditionMap = {
@@ -26,6 +27,7 @@ const statusBadge = (status) => {
     pending: "bg-yellow-100 text-yellow-700",
     draft:  "bg-slate-100 text-slate-500",
     sold:   "bg-blue-100 text-blue-700",
+    suspended: "bg-red-100 text-red-700",
   };
   return map[status] || "bg-slate-100 text-slate-600";
 };
@@ -185,6 +187,7 @@ export default function DashboardScreen() {
                   {activeTab === "pending" && "Không có tin nào chờ duyệt."}
                   {activeTab === "draft"  && "Không có bản nháp nào."}
                   {activeTab === "sold"   && "Chưa có giao dịch nào hoàn tất."}
+                  {activeTab === "suspended" && "Không có tin nào bị khóa."}
                 </p>
                 {activeTab === "active" && (
                   <Link to="/dang-ban" className="mt-3 inline-block text-teal-700 font-semibold text-sm hover:underline">
@@ -215,8 +218,14 @@ export default function DashboardScreen() {
                         <p className="font-semibold text-slate-900 text-sm truncate group-hover:text-teal-700 transition-colors">{book.title}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusBadge(book.status)}`}>
-                            {book.status === "active" ? "Đang bán" : book.status === "pending" ? "Chờ duyệt" : book.status === "draft" ? "Nháp" : "Đã bán"}
+                            {book.status === "active" ? "Đang bán" : book.status === "pending" ? "Chờ duyệt" : book.status === "draft" ? "Nháp" : book.status === "suspended" ? "Đã khóa" : "Đã bán"}
                           </span>
+                          {book.status === "suspended" && (
+                            <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                              Do tài khoản bị khóa
+                            </span>
+                          )}
                           <span className="text-xs text-slate-400 font-medium">
                             {conditionMap[book.condition] || book.condition}
                           </span>
@@ -249,7 +258,7 @@ export default function DashboardScreen() {
                           Xem
                         </Link>
 
-                        {book.status !== "sold" && (
+                        {book.status !== "sold" && book.status !== "suspended" && (
                           <button
                             onClick={() => handleEditClick(book.id, book.status)}
                             className="inline-flex items-center justify-center text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all active:scale-95"
@@ -267,7 +276,7 @@ export default function DashboardScreen() {
                           </button>
                         )}
 
-                        {book.status !== "sold" && (
+                        {book.status !== "sold" && book.status !== "suspended" && (
                           <button
                             onClick={() => handleDelete(book.id)}
                             className="inline-flex items-center justify-center text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg hover:bg-rose-100 hover:border-rose-300 transition-all active:scale-95"

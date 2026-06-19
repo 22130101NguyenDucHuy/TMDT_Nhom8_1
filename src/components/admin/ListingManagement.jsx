@@ -278,6 +278,7 @@ export default function ListingManagement() {
       case "rejected": return "admin-badge-danger";
       case "flagged":  return "admin-badge-danger";
       case "sold":     return "admin-badge-info";
+      case "suspended": return "admin-badge-danger";
       default:         return "admin-badge-info";
     }
   };
@@ -290,6 +291,7 @@ export default function ListingManagement() {
       case "flagged":  return "Vi Phạm";
       case "sold":     return "Đã Bán";
       case "draft":    return "Nháp";
+      case "suspended": return "Tài khoản bị khóa";
       default:         return status;
     }
   };
@@ -371,6 +373,7 @@ export default function ListingManagement() {
           <option value="flagged">Vi Phạm</option>
           <option value="rejected">Đã Từ Chối</option>
           <option value="sold">Đã Bán</option>
+          <option value="suspended">TK Bị Khóa</option>
           <option value="draft">Nháp</option>
         </select>
       </div>

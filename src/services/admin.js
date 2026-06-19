@@ -123,6 +123,25 @@ export async function updateUserStatus(userId, status) {
   try {
     const { data, error } = await supabase.from('lb_users').update({ status, updated_at: new Date().toISOString() }).eq('id', userId).select();
     if (error) throw error;
+
+    // Khi khóa user → vô hiệu hóa tất cả tin đăng đang active
+    if (status === 'suspended') {
+      await supabase
+        .from('lb_books')
+        .update({ status: 'suspended', updated_at: new Date().toISOString() })
+        .eq('seller_id', userId)
+        .eq('status', 'active');
+    }
+
+    // Khi kích hoạt lại user bị khóa → đưa tin đăng về trạng thái chờ duyệt
+    if (status === 'active') {
+      await supabase
+        .from('lb_books')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .eq('seller_id', userId)
+        .eq('status', 'suspended');
+    }
+
     return data[0];
   } catch (err) {
     console.warn('updateUserStatus fallback:', err?.message);

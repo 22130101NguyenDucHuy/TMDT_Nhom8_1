@@ -3,7 +3,7 @@ import { supabase } from "../../services/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { isAcademicEmail, getInstitutionName } from "../../utils/academicDomains";
 
-const VERIFICATION_EXPIRY_DAYS = 30;
+const VERIFICATION_EXPIRY_DAYS = 90;
 
 export default function VerificationGate({ children }) {
   const { user, userData, showToast, updateProfile } = useAuth();
