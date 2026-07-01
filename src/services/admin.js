@@ -571,6 +571,7 @@ export async function getVerifications(filters = {}, page = 1, perPage = 20) {
 
   const enriched = (data || []).map(r => ({
     ...r,
+    user: userMap[r.user_id] || null,
     user_name: userMap[r.user_id]?.name || '—',
     user_email: userMap[r.user_id]?.email || '—',
     submitted_date: r.created_at?.split('T')[0],
