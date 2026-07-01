@@ -180,7 +180,7 @@ export default function AdminDashboard() {
           targetUserId,
           "Mời nâng cấp lên Shop Uy Tín / Hội viên VIP",
           "Chúc mừng! Shop của bạn đã đạt mốc doanh số ấn tượng trong tháng này. Hãy nâng cấp lên Shop Uy Tín để được hưởng phí chiết khấu ưu đãi 2% và quyền lợi đẩy tin VIP!",
-          'promo'
+          'promotion'
         );
       }
       setInsightActions(prev => ({ ...prev, vip: true }));
@@ -200,7 +200,7 @@ export default function AdminDashboard() {
             u.id,
             "Siêu khuyến mãi: Mua 10 lượt Đẩy tin tặng 2!",
             "Cơ hội tăng tốc bán hàng! LoopBook ra mắt chương trình khuyến mại mua combo 10 lượt Đẩy tin tặng thêm 2 lượt đẩy tin miễn phí. Áp dụng ngay hôm nay!",
-            'promo'
+            'promotion'
           );
         }
       }
@@ -396,11 +396,15 @@ export default function AdminDashboard() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "20px" }}>
               <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
                 <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Tỷ lệ thanh khoản nguồn cung</p>
-                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: "#94a3b8" }}>Chưa có DL</p>
+                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: realAnalytics?.sellerMetrics?.liquidityRate ? "#0f766e" : "#94a3b8" }}>
+                  {realAnalytics?.sellerMetrics?.liquidityRate ? `${realAnalytics.sellerMetrics.liquidityRate}%` : "Chưa có DL"}
+                </p>
               </div>
               <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
                 <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Thời gian bán trung bình</p>
-                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: "#94a3b8" }}>Chưa có DL</p>
+                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: realAnalytics?.sellerMetrics?.avgSellingDays ? "#0f766e" : "#94a3b8" }}>
+                  {realAnalytics?.sellerMetrics?.avgSellingDays ? `${realAnalytics.sellerMetrics.avgSellingDays} ngày` : "Chưa có DL"}
+                </p>
               </div>
             </div>
 
@@ -417,11 +421,30 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-                      Chưa có đủ dữ liệu giao dịch để phân tích.
-                    </td>
-                  </tr>
+                  {(realAnalytics?.sellerMetrics?.topSellers || []).length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                        Chưa có đủ dữ liệu giao dịch để phân tích.
+                      </td>
+                    </tr>
+                  ) : realAnalytics.sellerMetrics.topSellers.map((s, i) => (
+                    <tr key={s.id}>
+                      <td><strong>{s.name}</strong></td>
+                      <td>{s.listed}</td>
+                      <td>{s.sold}</td>
+                      <td><span style={{ color: "#0f766e", fontWeight: 700 }}>{s.closingRate}%</span></td>
+                      <td>
+                        <button
+                          onClick={() => handleGiftBoost(s.name, `boost${i + 1}`)}
+                          disabled={insightActions[`boost${i + 1}`]}
+                          className="admin-btn admin-btn-primary"
+                          style={{ fontSize: "12px", padding: "4px 10px" }}
+                        >
+                          {insightActions[`boost${i + 1}`] ? "✓ Đã tặng" : "Tặng đẩy tin"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -439,11 +462,33 @@ export default function AdminDashboard() {
                     <th>Hành động</th>
                   </tr>
                 </thead>
-                  <tr>
-                    <td colSpan="6" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-                      Chưa có đủ dữ liệu giao dịch để phân tích.
-                    </td>
-                  </tr>
+                <tbody>
+                  {(realAnalytics?.sellerMetrics?.needsBoost || []).length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                        Chưa có đủ dữ liệu giao dịch để phân tích.
+                      </td>
+                    </tr>
+                  ) : realAnalytics.sellerMetrics.needsBoost.map((s) => (
+                    <tr key={s.id}>
+                      <td><strong>{s.name}</strong></td>
+                      <td>{s.listed}</td>
+                      <td>{s.sold}</td>
+                      <td><span style={{ color: "#f59e0b", fontWeight: 700 }}>{s.closingRate}%</span></td>
+                      <td><span className="admin-badge admin-badge-warning">Cần hỗ trợ</span></td>
+                      <td>
+                        <button
+                          onClick={() => handleGiftBoost(s.name, `boost_${s.id}`)}
+                          disabled={insightActions[`boost_${s.id}`]}
+                          className="admin-btn admin-btn-primary"
+                          style={{ fontSize: "12px", padding: "4px 10px" }}
+                        >
+                          {insightActions[`boost_${s.id}`] ? "✓ Đã tặng" : "Tặng đẩy tin"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
             </div>
 
@@ -460,11 +505,34 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-                      Chưa có báo cáo vi phạm hoặc tỷ lệ hủy đơn cao.
-                    </td>
-                  </tr>
+                  {(realAnalytics?.sellerMetrics?.highCancelSellers || []).length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                        Chưa có báo cáo vi phạm hoặc tỷ lệ hủy đơn cao.
+                      </td>
+                    </tr>
+                  ) : realAnalytics.sellerMetrics.highCancelSellers.map((s) => (
+                    <tr key={s.id}>
+                      <td><strong>{s.name}</strong></td>
+                      <td><span style={{ color: "#ef4444", fontWeight: 700 }}>{s.cancelRate}%</span></td>
+                      <td>{s.reports || 0}</td>
+                      <td>
+                        <span className={`admin-badge ${s.status === 'suspended' ? 'admin-badge-info' : 'admin-badge-warning'}`}>
+                          {s.status === 'suspended' ? 'Đã khóa' : 'Đang hoạt động'}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          onClick={() => handleSellerPenalty(s.name)}
+                          disabled={insightActions.penalty}
+                          className="admin-btn"
+                          style={{ fontSize: "12px", padding: "4px 10px", color: "#ef4444", borderColor: "#ef4444" }}
+                        >
+                          Áp dụng hình phạt
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -476,9 +544,19 @@ export default function AdminDashboard() {
           <div>
             <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "0 0 16px", color: "#1e293b" }}>Khoảng Giá Chốt Đơn Phổ Biến</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "28px" }}>
-              <div style={{ textAlign: "center", padding: "24px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
-                Chưa có dữ liệu phân tích khoảng giá.
-              </div>
+              {(realAnalytics?.buyerMetrics?.priceElasticity || []).length === 0 ? (
+                <div style={{ textAlign: "center", padding: "24px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
+                  Chưa có dữ liệu phân tích khoảng giá.
+                </div>
+              ) : realAnalytics.buyerMetrics.priceElasticity.map((p) => (
+                <div key={p.range} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ width: "120px", fontSize: "13px", fontWeight: 600, color: "#475569" }}>{p.range}</span>
+                  <div style={{ flex: 1, background: "#e2e8f0", borderRadius: "6px", height: "24px", overflow: "hidden" }}>
+                    <div style={{ width: `${p.pct}%`, background: "#0f766e", height: "100%", borderRadius: "6px", minWidth: p.count > 0 ? "4px" : 0 }} />
+                  </div>
+                  <span style={{ width: "60px", textAlign: "right", fontSize: "13px", fontWeight: 700, color: "#0f766e" }}>{p.count} đơn</span>
+                </div>
+              ))}
             </div>
 
             <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "24px 0 12px", color: "#1e293b" }}>Tỷ Lệ Chuyển Đổi Từ Khóa Tìm Kiếm</h3>
@@ -494,11 +572,21 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-                      Chưa có dữ liệu chuyển đổi từ khóa tìm kiếm.
-                    </td>
-                  </tr>
+                  {(realAnalytics?.buyerMetrics?.searchToCart || []).length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                        Chưa có dữ liệu chuyển đổi từ khóa tìm kiếm.
+                      </td>
+                    </tr>
+                  ) : realAnalytics.buyerMetrics.searchToCart.map((s) => (
+                    <tr key={s.keyword}>
+                      <td><strong>{s.keyword}</strong></td>
+                      <td>{s.searches}</td>
+                      <td>{s.purchases}</td>
+                      <td>{s.reason}</td>
+                      <td>{s.action}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -509,19 +597,39 @@ export default function AdminDashboard() {
         {activeTab === "monetization" && (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "24px" }}>
-              <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc", textAlign: "center", color: "#64748b" }}>
-                Chưa có dữ liệu hiệu suất đẩy tin.
+              <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc" }}>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Hiệu suất đẩy tin (so với thường)</p>
+                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: (realAnalytics?.monetization?.bumpEffectiveness || 0) > 0 ? "#0f766e" : "#94a3b8" }}>
+                  {(realAnalytics?.monetization?.bumpEffectiveness || 0) !== 0
+                    ? `${realAnalytics.monetization.bumpEffectiveness > 0 ? '+' : ''}${realAnalytics.monetization.bumpEffectiveness}%`
+                    : "Chưa có DL"}
+                </p>
               </div>
-              <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc", textAlign: "center", color: "#64748b" }}>
-                Chưa có dữ liệu doanh thu đẩy tin.
+              <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc" }}>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Doanh thu đẩy tin</p>
+                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: realAnalytics?.monetization?.bumpRevenue ? "#0f766e" : "#94a3b8" }}>
+                  {realAnalytics?.monetization?.bumpRevenue
+                    ? formatCurrencyShort(realAnalytics.monetization.bumpRevenue)
+                    : "Chưa có DL"}
+                </p>
               </div>
             </div>
 
             <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "24px 0 12px", color: "#1e293b" }}>Phân Bố Doanh Thu Hoa Hồng Theo Danh Mục</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ textAlign: "center", padding: "24px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
-                Chưa có dữ liệu phân bố doanh thu.
-              </div>
+              {(realAnalytics?.monetization?.categoryRevenue || []).length === 0 ? (
+                <div style={{ textAlign: "center", padding: "24px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
+                  Chưa có dữ liệu phân bố doanh thu.
+                </div>
+              ) : realAnalytics.monetization.categoryRevenue.map((c) => (
+                <div key={c.category} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ width: "120px", fontSize: "13px", fontWeight: 600, color: "#475569" }}>{c.category}</span>
+                  <div style={{ flex: 1, background: "#e2e8f0", borderRadius: "6px", height: "24px", overflow: "hidden" }}>
+                    <div style={{ width: `${c.pct}%`, background: "#8b5cf6", height: "100%", borderRadius: "6px", minWidth: c.fee > 0 ? "4px" : 0 }} />
+                  </div>
+                  <span style={{ width: "80px", textAlign: "right", fontSize: "13px", fontWeight: 700, color: "#8b5cf6" }}>{formatCurrencyShort(c.fee)}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

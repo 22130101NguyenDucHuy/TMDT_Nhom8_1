@@ -728,11 +728,12 @@ export async function rejectWithdrawal(id, userId, amount) {
 
 export async function createSystemNotification(userId, title, content, type = 'system') {
   try {
+    const notifType = type === 'promo' ? 'promotion' : type;
     const { data, error } = await supabase
       .from('lb_notifications')
       .insert([{
         user_id: userId,
-        type,
+        type: notifType,
         title,
         content,
         is_read: false,
@@ -781,79 +782,234 @@ export async function getPromoCampaign() {
 
 export async function getRealAdminAnalytics() {
   const analytics = {
-    sellerMetrics: { topSellers: [], liquidityRate: 0, lowQualitySellers: [] },
+    sellerMetrics: {
+      topSellers: [],
+      needsBoost: [],
+      highCancelSellers: [],
+      liquidityRate: 0,
+      avgSellingDays: 0,
+    },
     buyerMetrics: { priceElasticity: [], searchToCart: [] },
-    monetization: { bumpEffectiveness: 0, categoryRevenue: [] },
-    smartInsights: { highDemandLowSupply: null, topSellerMilestone: null, promoCampaign: null }
+    monetization: { bumpEffectiveness: 0, bumpRevenue: 0, categoryRevenue: [] },
+    smartInsights: { highDemandLowSupply: null, topSellerMilestone: null, promoCampaign: null },
   };
 
   try {
-    // 1. Seller Metrics - Top Sellers (Dựa vào số dư ví hoặc tổng số gd)
-    const { data: topUsers } = await supabase
-      .from('auth.users') // Ko truy cập dc bằng anon, nên lấy qua lb_transactions
-      .select('*')
-      .limit(0);
-      
-    const { data: txns } = await supabase.from('lb_transactions').select('seller_id, buyer_id, amount, status, is_completed, created_at, book, book_id, type');
-    
-    // Gom nhóm người bán
-    const sellersMap = {};
-    const buyersMap = {};
-    let totalRevenue = {};
-    
-    if (txns) {
-      txns.forEach(t => {
-        if (t.type === 'buy' && t.is_completed) {
-          if (!sellersMap[t.seller_id]) sellersMap[t.seller_id] = { count: 0, revenue: 0 };
-          sellersMap[t.seller_id].count += 1;
-          sellersMap[t.seller_id].revenue += Number(t.amount);
-          
-          if (!buyersMap[t.buyer_id]) buyersMap[t.buyer_id] = { count: 0, spent: 0 };
-          buyersMap[t.buyer_id].count += 1;
-          buyersMap[t.buyer_id].spent += Number(t.amount);
+    const [
+      { data: txns },
+      { data: books },
+      { data: searches },
+      { data: reports },
+      { data: promos },
+    ] = await Promise.all([
+      supabase.from('lb_transactions').select('seller_id, buyer_id, amount, status, is_completed, created_at, book, book_id, type, fee_amount'),
+      supabase.from('lb_books').select('id, seller_id, status, is_sold, sold_at, created_at, category, title'),
+      supabase.from('lb_search_logs').select('keyword'),
+      supabase.from('lb_reports').select('target_id, target_type, status').eq('target_type', 'user'),
+      supabase.from('lb_listing_promotions').select('book_id, is_active, amount_paid'),
+    ]);
+
+    const sellerBooks = {};
+    const bookCategoryMap = {};
+    let totalListed = 0;
+    let totalSold = 0;
+    let sellingDaysSum = 0;
+    let sellingDaysCount = 0;
+
+    (books || []).forEach(b => {
+      if (!b.seller_id) return;
+      bookCategoryMap[b.id] = b.category;
+      if (!sellerBooks[b.seller_id]) sellerBooks[b.seller_id] = { listed: 0, sold: 0 };
+      sellerBooks[b.seller_id].listed += 1;
+      totalListed += 1;
+      if (b.is_sold || b.status === 'sold') {
+        sellerBooks[b.seller_id].sold += 1;
+        totalSold += 1;
+        if (b.sold_at && b.created_at) {
+          const days = (new Date(b.sold_at) - new Date(b.created_at)) / (1000 * 60 * 60 * 24);
+          if (days >= 0) { sellingDaysSum += days; sellingDaysCount += 1; }
         }
-      });
-    }
-
-    const sortedSellers = Object.entries(sellersMap).sort((a,b) => b[1].count - a[1].count);
-    if (sortedSellers.length > 0) {
-      const best = sortedSellers[0];
-      const { data: bestUser } = await supabase.from('lb_users').select('name').eq('id', best[0]).maybeSingle();
-      if (bestUser && best[1].count > 0) {
-        analytics.smartInsights.topSellerMilestone = {
-          message: `Tài khoản '${bestUser.name}' vừa đạt mốc ${best[1].count} đơn hàng thành công tháng này.`,
-          userId: best[0]
-        };
       }
-    }
+    });
 
-    // 2. Buyer Metrics - Search to Cart / High demand
-    const { data: searches } = await supabase.from('lb_search_logs').select('keyword');
-    if (searches && searches.length > 0) {
-      const searchCount = {};
-      searches.forEach(s => {
-        const k = s.keyword.toLowerCase();
-        searchCount[k] = (searchCount[k] || 0) + 1;
-      });
-      const topSearch = Object.entries(searchCount).sort((a,b) => b[1] - a[1])[0];
-      if (topSearch) {
-        const { count: supply } = await supabase.from('lb_books').select('id', { count: 'exact' }).ilike('title', `%${topSearch[0]}%`);
-        analytics.smartInsights.highDemandLowSupply = {
-          message: `Có ${topSearch[1]} lượt tìm kiếm sách '${topSearch[0]}' nhưng hiện tại trên sàn chỉ có ${supply || 0} tin đăng.`,
-          keyword: topSearch[0]
-        };
+    analytics.sellerMetrics.liquidityRate = totalListed > 0 ? Math.round((totalSold / totalListed) * 100) : 0;
+    analytics.sellerMetrics.avgSellingDays = sellingDaysCount > 0 ? Math.round(sellingDaysSum / sellingDaysCount) : 0;
+
+    const sellerTxns = {};
+    const priceBuckets = { 'Dưới 50K': 0, '50K - 100K': 0, '100K - 200K': 0, 'Trên 200K': 0 };
+    const categoryFees = {};
+
+    (txns || []).forEach(t => {
+      if (t.type !== 'buy' || !t.seller_id) return;
+      if (!sellerTxns[t.seller_id]) sellerTxns[t.seller_id] = { completed: 0, cancelled: 0, total: 0 };
+      sellerTxns[t.seller_id].total += 1;
+      if (t.status === 'cancelled') sellerTxns[t.seller_id].cancelled += 1;
+      if (t.is_completed && t.status === 'completed') {
+        sellerTxns[t.seller_id].completed += 1;
+        const amt = parseAmount(t.amount);
+        if (amt < 50000) priceBuckets['Dưới 50K'] += 1;
+        else if (amt < 100000) priceBuckets['50K - 100K'] += 1;
+        else if (amt < 200000) priceBuckets['100K - 200K'] += 1;
+        else priceBuckets['Trên 200K'] += 1;
+
+        const cat = bookCategoryMap[t.book_id] || 'khac';
+        categoryFees[cat] = (categoryFees[cat] || 0) + (Number(t.fee_amount) || 0);
       }
+    });
+
+    const sellerIds = [...new Set([
+      ...Object.keys(sellerBooks),
+      ...Object.keys(sellerTxns),
+    ])].filter(id => id && id !== 'null' && id !== 'undefined');
+    const userMap = {};
+    if (sellerIds.length > 0) {
+      const { data: users, error: usersErr } = await supabase.from('lb_users').select('id, name, status').in('id', sellerIds);
+      if (usersErr) console.warn('getRealAdminAnalytics user lookup:', usersErr.message);
+      (users || []).forEach(u => { userMap[u.id] = u; });
     }
 
-    analytics.sellerMetrics.liquidityRate = 0; 
-    analytics.monetization.bumpEffectiveness = 0;
-    
-    analytics.smartInsights.promoCampaign = null;
+    const reportCount = {};
+    (reports || []).forEach(r => {
+      reportCount[r.target_id] = (reportCount[r.target_id] || 0) + 1;
+    });
+
+    const sellerRows = sellerIds.map(id => {
+      const books = sellerBooks[id] || { listed: 0, sold: 0 };
+      const txn = sellerTxns[id] || { completed: 0, cancelled: 0, total: 0 };
+      const closingRate = books.listed > 0 ? Math.round((books.sold / books.listed) * 100) : 0;
+      const cancelRate = txn.total > 0 ? Math.round((txn.cancelled / txn.total) * 100) : 0;
+      return {
+        id,
+        name: userMap[id]?.name || '—',
+        status: userMap[id]?.status || 'active',
+        listed: books.listed,
+        sold: books.sold,
+        completed: txn.completed,
+        closingRate,
+        cancelRate,
+        reports: reportCount[id] || 0,
+      };
+    });
+
+    analytics.sellerMetrics.topSellers = sellerRows
+      .filter(s => s.listed >= 1 && s.closingRate >= 30)
+      .sort((a, b) => b.closingRate - a.closingRate || b.sold - a.sold)
+      .slice(0, 5);
+
+    analytics.sellerMetrics.needsBoost = sellerRows
+      .filter(s => s.listed >= 2 && s.closingRate < 30)
+      .sort((a, b) => a.closingRate - b.closingRate)
+      .slice(0, 5);
+
+    analytics.sellerMetrics.highCancelSellers = sellerRows
+      .filter(s => {
+        const txn = sellerTxns[s.id] || { total: 0, cancelled: 0 };
+        return s.cancelRate >= 30 && txn.total >= 2;
+      })
+      .sort((a, b) => b.cancelRate - a.cancelRate)
+      .slice(0, 5);
+
+    const maxPrice = Math.max(...Object.values(priceBuckets), 1);
+    analytics.buyerMetrics.priceElasticity = Object.entries(priceBuckets).map(([range, count]) => ({
+      range,
+      count,
+      pct: Math.round((count / maxPrice) * 100),
+    }));
+
+    const searchCount = {};
+    (searches || []).forEach(s => {
+      const k = (s.keyword || '').toLowerCase().trim();
+      if (k) searchCount[k] = (searchCount[k] || 0) + 1;
+    });
+
+    const completedBooks = (txns || []).filter(t => t.type === 'buy' && t.is_completed);
+    analytics.buyerMetrics.searchToCart = Object.entries(searchCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([keyword, searches]) => {
+        const purchases = completedBooks.filter(t =>
+          (t.book || '').toLowerCase().includes(keyword) ||
+          keyword.split(' ').some(w => w.length > 2 && (t.book || '').toLowerCase().includes(w))
+        ).length;
+        const conversion = searches > 0 ? Math.round((purchases / searches) * 100) : 0;
+        let reason = '—';
+        let action = '—';
+        if (conversion < 5) {
+          reason = 'Nguồn cung ít / giá cao';
+          action = 'Thông báo cho Seller cùng khoa';
+        } else if (conversion < 15) {
+          reason = 'Chất lượng tin đăng chưa tốt';
+          action = 'Gợi ý đẩy tin VIP';
+        } else {
+          reason = 'Chuyển đổi tốt';
+          action = 'Duy trì nguồn hàng';
+        }
+        return { keyword, searches, purchases, conversion, reason, action };
+      });
+
+    const topSearch = Object.entries(searchCount).sort((a, b) => b[1] - a[1])[0];
+    if (topSearch) {
+      const { count: supply } = await supabase
+        .from('lb_books')
+        .select('id', { count: 'exact' })
+        .ilike('title', `%${topSearch[0]}%`);
+      analytics.smartInsights.highDemandLowSupply = {
+        message: `Có ${topSearch[1]} lượt tìm kiếm sách '${topSearch[0]}' nhưng hiện tại trên sàn chỉ có ${supply || 0} tin đăng.`,
+        keyword: topSearch[0],
+      };
+    }
+
+    const sortedBySales = sellerRows.sort((a, b) => b.completed - a.completed);
+    if (sortedBySales[0]?.completed > 0) {
+      const best = sortedBySales[0];
+      analytics.smartInsights.topSellerMilestone = {
+        message: `Tài khoản '${best.name}' vừa đạt mốc ${best.completed} đơn hàng thành công.`,
+        userId: best.id,
+      };
+    }
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentCompleted = (txns || []).filter(t =>
+      t.type === 'buy' && t.is_completed && new Date(t.created_at) >= thirtyDaysAgo
+    ).length;
+    if (recentCompleted < 10) {
+      analytics.smartInsights.promoCampaign = {
+        message: `Doanh số 30 ngày gần đây thấp (${recentCompleted} đơn). Cân nhắc kích hoạt campaign khuyến mãi.`,
+      };
+    }
+
+    const promoBookIds = new Set((promos || []).filter(p => p.is_active).map(p => p.book_id));
+    let promoSold = 0, promoTotal = 0, nonPromoSold = 0, nonPromoTotal = 0;
+    (books || []).forEach(b => {
+      const isPromo = promoBookIds.has(b.id);
+      const sold = b.is_sold || b.status === 'sold';
+      if (isPromo) { promoTotal++; if (sold) promoSold++; }
+      else { nonPromoTotal++; if (sold) nonPromoSold++; }
+    });
+    const promoRate = promoTotal > 0 ? Math.round((promoSold / promoTotal) * 100) : 0;
+    const nonPromoRate = nonPromoTotal > 0 ? Math.round((nonPromoSold / nonPromoTotal) * 100) : 0;
+    analytics.monetization.bumpEffectiveness = promoRate - nonPromoRate;
+    analytics.monetization.bumpRevenue = (promos || []).reduce((s, p) => s + (Number(p.amount_paid) || 0), 0);
+
+    const CATEGORY_LABELS = {
+      'cong-nghe-thong-tin': 'CNTT', 'khoa-hoc-tu-nhien': 'KHTN', 'kinh-te': 'Kinh Tế',
+      'ky-thuat': 'Kỹ Thuật', 'luat': 'Luật', 'ngoai-ngu': 'Ngoại Ngữ',
+      'nong-nghiep': 'Nông Nghiệp', 'toan-hoc': 'Toán', 'xa-hoi-hoc': 'Xã Hội Học', 'y-hoc': 'Y Học',
+    };
+    const maxFee = Math.max(...Object.values(categoryFees), 1);
+    analytics.monetization.categoryRevenue = Object.entries(categoryFees)
+      .map(([cat, fee]) => ({
+        category: CATEGORY_LABELS[cat] || cat,
+        fee,
+        pct: Math.round((fee / maxFee) * 100),
+      }))
+      .sort((a, b) => b.fee - a.fee);
 
   } catch (err) {
-    console.warn("getRealAdminAnalytics error:", err);
+    console.warn('getRealAdminAnalytics error:', err);
   }
-  
+
   return analytics;
 }
 
