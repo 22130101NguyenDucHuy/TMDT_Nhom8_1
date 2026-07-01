@@ -160,7 +160,6 @@ export default function TransactionManagement() {
               <th>Giá</th>
               <th>Trạng Thái</th>
               <th>Ngày</th>
-              <th>Hành Động</th>
             </tr>
           </thead>
           <tbody>
@@ -176,21 +175,10 @@ export default function TransactionManagement() {
                   </span>
                 </td>
                 <td>{tx.created_at ? new Date(tx.created_at).toLocaleDateString("vi-VN") : "—"}</td>
-                <td>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Chi Tiết</button>
-                    {(tx.status === "pending" || tx.status === "awaiting_meet") && (
-                      <button onClick={() => handleConfirm(tx.id)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === tx.id}>
-                        {actionLoading === tx.id ? "..." : "Xác Nhận"}
-                      </button>
-                    )}
-                    <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Liên Hệ</button>
-                  </div>
-                </td>
               </tr>
             ))}
             {txList.length === 0 && (
-              <tr><td colSpan="7" style={{ textAlign: "center", padding: "32px", color: "#56647e" }}>Chưa có giao dịch nào</td></tr>
+              <tr><td colSpan="6" style={{ textAlign: "center", padding: "32px", color: "#56647e" }}>Chưa có giao dịch nào</td></tr>
             )}
           </tbody>
         </table>
