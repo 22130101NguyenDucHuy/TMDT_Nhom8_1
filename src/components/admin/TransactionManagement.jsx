@@ -26,6 +26,36 @@ export default function TransactionManagement() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [actionLoading, setActionLoading] = useState(null);
+  const [selectedTx, setSelectedTx] = useState(null);
+
+  const handleExport = () => {
+    if (txList.length === 0) {
+      alert("Không có giao dịch để xuất");
+      return;
+    }
+    const headers = ["ID", "Ten sach", "Nguoi mua", "Nguoi ban", "Gia tien (vnd)", "Trang thai", "Ngay tao"];
+    const rows = txList.map(tx => [
+      tx.id,
+      tx.book || "",
+      tx.buyer_name || "",
+      tx.seller_name || "",
+      tx.amount || 0,
+      STATUS_MAP[tx.status] || tx.status,
+      tx.created_at ? new Date(tx.created_at).toLocaleDateString("vi-VN") : ""
+    ]);
+    
+    // Add BOM for Excel UTF-8 support
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `bao_cao_giao_dich_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const loadTransactions = async (background) => {
     if (!background) setLoading(true);
@@ -112,7 +142,7 @@ export default function TransactionManagement() {
       <div className="admin-header">
         <h1>Quản Lý Giao Dịch</h1>
         <div className="admin-actions">
-          <button className="admin-btn admin-btn-secondary">Export</button>
+          <button onClick={handleExport} className="admin-btn admin-btn-secondary">Export</button>
           <button className="admin-btn admin-btn-secondary">Thống Kê</button>
         </div>
       </div>
@@ -178,7 +208,7 @@ export default function TransactionManagement() {
                 <td>{tx.created_at ? new Date(tx.created_at).toLocaleDateString("vi-VN") : "—"}</td>
                 <td>
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Chi Tiết</button>
+                    <button onClick={() => setSelectedTx(tx)} className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Chi Tiết</button>
                     {(tx.status === "pending" || tx.status === "awaiting_meet") && (
                       <button onClick={() => handleConfirm(tx.id)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === tx.id}>
                         {actionLoading === tx.id ? "..." : "Xác Nhận"}
@@ -211,6 +241,26 @@ export default function TransactionManagement() {
       <div style={{ marginTop: "16px", color: "#56647e", fontSize: "14px" }}>
         Hiển thị {txList.length} giao dịch
       </div>
+
+      {selectedTx && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl relative animate-in zoom-in-95 duration-200">
+            <h2 className="text-lg font-bold text-slate-900 mb-4" style={{ margin: "0 0 16px 0", borderBottom: "1px solid #f1f5f9", paddingBottom: "12px" }}>Chi Tiết Giao Dịch</h2>
+            <div className="space-y-3 text-sm text-slate-700" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div><span style={{ fontWeight: 600, color: "#64748b" }}>Mã giao dịch:</span> <span style={{ fontFamily: "monospace", fontSize: "12px" }}>{selectedTx.id}</span></div>
+              <div><span style={{ fontWeight: 600, color: "#64748b" }}>Tài liệu/Sách:</span> <strong style={{ color: "#0f172a" }}>{selectedTx.book}</strong></div>
+              <div><span style={{ fontWeight: 600, color: "#64748b" }}>Người mua:</span> {selectedTx.buyer_name || "—"}</div>
+              <div><span style={{ fontWeight: 600, color: "#64748b" }}>Người bán:</span> {selectedTx.seller_name || "—"}</div>
+              <div><span style={{ fontWeight: 600, color: "#64748b" }}>Số tiền:</span> <strong style={{ color: "#0f766e" }}>{selectedTx.amount ? `${Number(selectedTx.amount).toLocaleString("vi-VN")}đ` : "—"}</strong></div>
+              <div><span style={{ fontWeight: 600, color: "#64748b" }}>Trạng thái:</span> <span className={`inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-100 ${statusColor(selectedTx.status) === 'admin-badge-success' ? 'text-emerald-700 bg-emerald-50' : (statusColor(selectedTx.status) === 'admin-badge-danger' ? 'text-red-700 bg-red-50' : 'text-amber-700 bg-amber-50')}`} style={{ padding: "2px 8px", borderRadius: "9999px", fontSize: "12px" }}>{STATUS_MAP[selectedTx.status] || selectedTx.status}</span></div>
+              <div><span style={{ fontWeight: 600, color: "#64748b" }}>Thời gian tạo:</span> {selectedTx.created_at ? new Date(selectedTx.created_at).toLocaleString("vi-VN") : "—"}</div>
+            </div>
+            <div className="mt-6 flex justify-end" style={{ marginTop: "24px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
+              <button onClick={() => setSelectedTx(null)} className="admin-btn admin-btn-secondary" style={{ padding: "8px 16px" }}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
