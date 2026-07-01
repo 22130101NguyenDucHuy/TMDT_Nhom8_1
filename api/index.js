@@ -1,2 +1,2 @@
-const app = require('../server-payment/index.js');
-module.exports = app;
+import app from '../server-payment/index.js';
+export default app;
