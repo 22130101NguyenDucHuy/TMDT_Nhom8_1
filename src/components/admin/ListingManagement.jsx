@@ -76,6 +76,12 @@ function ActionButtons({ listing, actionLoading, onApprove, onReject, onFlag, on
 
   return (
     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+      <button className="admin-btn admin-btn-secondary"
+        style={{ padding: "5px 10px", fontSize: "12px" }}
+        onClick={stop(() => window.open(`/sach/${listing.id}`, "_blank"))}
+        title="Xem chi tiết sách">
+        Chi tiết
+      </button>
       {listing.status === "pending" && (
         <>
           <button className="admin-btn admin-btn-success"
