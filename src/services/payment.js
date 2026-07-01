@@ -513,3 +513,46 @@ export async function cancelTransaction(transactionId, userId) {
   return updatedTxn;
 }
 
+export async function submitSellerRating(transactionId, sellerId, ratingValue) {
+  if (!transactionId || !sellerId || !ratingValue || ratingValue < 1 || ratingValue > 5) {
+    throw new Error('Thông tin đánh giá không hợp lệ');
+  }
+
+  const { data: txn, error: txnError } = await supabase
+    .from('lb_transactions')
+    .select('id, notes, status')
+    .eq('id', transactionId)
+    .single();
+  if (txnError) throw txnError;
+
+  if (txn.notes?.includes('|rated:true')) {
+    throw new Error('Giao dịch này đã được đánh giá trước đó');
+  }
+
+  const { data: seller, error: sellerError } = await supabase
+    .from('lb_users')
+    .select('rating_sum, rating_count')
+    .eq('id', sellerId)
+    .single();
+  if (sellerError) throw sellerError;
+
+  const { error: updateSellerError } = await supabase
+    .from('lb_users')
+    .update({
+      rating_sum: (seller.rating_sum || 0) + ratingValue,
+      rating_count: (seller.rating_count || 0) + 1,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', sellerId);
+  if (updateSellerError) throw updateSellerError;
+
+  const newNotes = (txn.notes || '') + `|rated:true|rating:${ratingValue}`;
+  const { error: updateTxnError } = await supabase
+    .from('lb_transactions')
+    .update({ notes: newNotes })
+    .eq('id', transactionId);
+  if (updateTxnError) throw updateTxnError;
+
+  return true;
+}
+

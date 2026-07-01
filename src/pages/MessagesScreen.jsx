@@ -3,7 +3,7 @@ import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
 import { formatPrice } from "../utils/formatters";
-import { releaseEscrow } from "../services/payment";
+import { releaseEscrow, submitSellerRating } from "../services/payment";
 
 /** Tạo conversation_id nhất quán giữa 2 user cho 1 cuốn sách */
 function buildConvId(uid1, uid2, bookId) {
@@ -30,6 +30,12 @@ export default function MessagesScreen() {
   const [disputeTxnId, setDisputeTxnId] = useState(null);
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeLoading, setDisputeLoading] = useState(false);
+
+  // Rating and Offer states
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [processingOfferId, setProcessingOfferId] = useState(null);
 
   const messagesEndRef = useRef(null);
   const realtimeChannelRef = useRef(null);
@@ -108,7 +114,7 @@ export default function MessagesScreen() {
     if (bookIds.length > 0) {
       const { data: books, error: bErr } = await supabase
         .from("lb_books")
-        .select("id, title, images, price")
+        .select("id, title, images, price, seller_id")
         .in("id", bookIds);
       if (bErr) console.error("[fetchConversations] books error:", bErr.message);
       (books || []).forEach((b) => (bookMap[b.id] = b));
@@ -187,7 +193,7 @@ export default function MessagesScreen() {
         // Lấy thông tin sách
         const { data: bookData } = await supabase
           .from("lb_books")
-          .select("id, title, images, price")
+          .select("id, title, images, price, seller_id")
           .eq("id", state.bookId)
           .single();
 
@@ -224,7 +230,8 @@ export default function MessagesScreen() {
 
         // Gửi offer nếu có
         if (state.initialOffer?.offerPrice) {
-          const offerText = `[OFFER] Tôi muốn trả giá "${state.bookTitle}" với mức ${Number(state.initialOffer.offerPrice).toLocaleString("vi-VN")}₫`;
+          const offerPrice = parseInt(state.initialOffer.offerPrice, 10);
+          const offerText = `[OFFER:${offerPrice}] Tôi muốn trả giá "${state.bookTitle}" với mức ${offerPrice.toLocaleString("vi-VN")}₫`;
           await insertMessage(offerText, newConv);
         }
 
@@ -377,6 +384,116 @@ export default function MessagesScreen() {
       showToast(err.message || "Có lỗi xảy ra khi gửi khiếu nại", "error");
     } finally {
       setDisputeLoading(false);
+    }
+  };
+
+  const handleRateSeller = async () => {
+    if (!txnInfo) return;
+    setRatingSubmitting(true);
+    try {
+      await submitSellerRating(txnInfo.id, txnInfo.seller_id, ratingValue);
+      showToast("Cảm ơn bạn đã đánh giá người bán!", "success");
+      setShowRatingModal(false);
+      fetchTxnForConv(activeConvRef.current);
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra khi đánh giá", "error");
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
+
+  const handleAcceptOffer = async (msg, offerPrice) => {
+    if (!activeConv || processingOfferId) return;
+    if (!window.confirm(`Bạn có đồng ý bán sách với mức giá ${offerPrice.toLocaleString("vi-VN")}₫?`)) return;
+
+    setProcessingOfferId(msg.id);
+    try {
+      const { error: bookErr } = await supabase
+        .from('lb_books')
+        .update({ price: offerPrice, updated_at: new Date().toISOString() })
+        .eq('id', activeConv.bookId);
+      if (bookErr) throw bookErr;
+
+      const { error: msgErr } = await supabase
+        .from('lb_messages')
+        .update({ text: msg.text + '|status:accepted' })
+        .eq('id', msg.id);
+      if (msgErr) throw msgErr;
+
+      const textNoti = `[HỆ THỐNG] Người bán đã đồng ý giá đề xuất ${offerPrice.toLocaleString("vi-VN")}₫. Bạn có thể đặt mua ngay bây giờ với giá mới!`;
+      await supabase.from('lb_messages').insert({
+        conversation_id: activeConv.id,
+        sender_id: user.id,
+        receiver_id: activeConv.partnerId,
+        book_id: activeConv.bookId,
+        text: textNoti,
+        message_type: 'text',
+        created_at: new Date().toISOString()
+      });
+
+      showToast("Đã chấp nhận giá đề xuất!", "success");
+      
+      const { data: updatedBook } = await supabase
+        .from('lb_books')
+        .select('id, title, images, price, seller_id')
+        .eq('id', activeConv.bookId)
+        .single();
+      
+      if (updatedBook) {
+        setActiveConv(prev => ({
+          ...prev,
+          book: updatedBook
+        }));
+      }
+      
+      const { data: newMsgs } = await supabase
+        .from('lb_messages')
+        .select('*')
+        .eq('conversation_id', activeConv.id)
+        .order('created_at', { ascending: true });
+      setMessages(newMsgs || []);
+    } catch (err) {
+      showToast(err.message || "Lỗi khi đồng ý giá đề xuất", "error");
+    } finally {
+      setProcessingOfferId(null);
+    }
+  };
+
+  const handleDeclineOffer = async (msg, offerPrice) => {
+    if (!activeConv || processingOfferId) return;
+    if (!window.confirm("Bạn muốn từ chối mức đề xuất giá này?")) return;
+
+    setProcessingOfferId(msg.id);
+    try {
+      const { error: msgErr } = await supabase
+        .from('lb_messages')
+        .update({ text: msg.text + '|status:rejected' })
+        .eq('id', msg.id);
+      if (msgErr) throw msgErr;
+
+      const textNoti = `[HỆ THỐNG] Người bán đã từ chối giá đề xuất ${offerPrice.toLocaleString("vi-VN")}₫.`;
+      await supabase.from('lb_messages').insert({
+        conversation_id: activeConv.id,
+        sender_id: user.id,
+        receiver_id: activeConv.partnerId,
+        book_id: activeConv.bookId,
+        text: textNoti,
+        message_type: 'text',
+        created_at: new Date().toISOString()
+      });
+
+      showToast("Đã từ chối giá đề xuất", "info");
+
+      const { data: newMsgs } = await supabase
+        .from('lb_messages')
+        .select('*')
+        .eq('conversation_id', activeConv.id)
+        .order('created_at', { ascending: true });
+      setMessages(newMsgs || []);
+    } catch (err) {
+      showToast(err.message || "Lỗi khi từ chối giá đề xuất", "error");
+    } finally {
+      setProcessingOfferId(null);
     }
   };
 
@@ -607,6 +724,14 @@ export default function MessagesScreen() {
                       {txnInfo.buyer_id === user.id ? "Đã nhận sách" : "Đã bán"}
                     </span>
                   )}
+                  {txnInfo.status === "completed" && txnInfo.buyer_id === user.id && !txnInfo.notes?.includes('|rated:true') && (
+                    <button
+                      onClick={() => setShowRatingModal(true)}
+                      className="px-3 py-1.5 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <span className="text-yellow-500">★</span> Đánh giá người bán
+                    </button>
+                  )}
                   {txnInfo.status === "disputed" && (
                     <span className="px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 text-xs font-semibold rounded-lg flex items-center gap-1">
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -705,15 +830,80 @@ export default function MessagesScreen() {
                       </div>
                     )}
                     <div>
-                      <div
-                        className={`px-4 py-2.5 text-sm leading-relaxed ${
-                          isMe
-                            ? "bg-teal-700 text-white rounded-2xl rounded-tr-sm"
-                            : "bg-slate-100 text-slate-900 rounded-2xl rounded-tl-sm"
-                        } ${m._optimistic ? "opacity-60" : ""}`}
-                      >
-                        {m.text}
-                      </div>
+                      {(() => {
+                        const isOffer = m.text.startsWith('[OFFER:');
+                        if (isOffer) {
+                          const match = m.text.match(/^\[OFFER:(\d+)\]/);
+                          const offerPrice = match ? parseInt(match[1], 10) : 0;
+                          
+                          let offerStatus = 'pending';
+                          if (m.text.includes('|status:accepted')) offerStatus = 'accepted';
+                          else if (m.text.includes('|status:rejected')) offerStatus = 'rejected';
+
+                          const cleanText = m.text
+                            .replace(/^\[OFFER:\d+\]\s*/, '')
+                            .replace(/\|status:\w+/, '');
+
+                          const isSeller = activeConv?.book?.seller_id === user.id;
+
+                          return (
+                            <div className="flex flex-col gap-2">
+                              <div
+                                className={`px-4 py-2.5 text-sm leading-relaxed border ${
+                                  isMe
+                                    ? "bg-teal-50 border-teal-200 text-teal-900 rounded-2xl rounded-tr-sm"
+                                    : "bg-slate-50 border-slate-200 text-slate-950 rounded-2xl rounded-tl-sm"
+                                }`}
+                              >
+                                <div className="font-semibold text-xs text-amber-700 uppercase tracking-wider mb-1">🏷️ Đề xuất giá từ người mua</div>
+                                <div className="text-slate-800">{cleanText}</div>
+                                
+                                {offerStatus === 'accepted' && (
+                                  <div className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                                    ✓ Đã đồng ý mức giá này
+                                  </div>
+                                )}
+                                {offerStatus === 'rejected' && (
+                                  <div className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                                    ✕ Đã từ chối đề xuất
+                                  </div>
+                                )}
+                              </div>
+
+                              {offerStatus === 'pending' && isSeller && !isMe && (
+                                <div className="flex gap-2 mt-1">
+                                  <button
+                                    onClick={() => handleAcceptOffer(m, offerPrice)}
+                                    disabled={processingOfferId === m.id}
+                                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                                  >
+                                    Đồng ý bán
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeclineOffer(m, offerPrice)}
+                                    disabled={processingOfferId === m.id}
+                                    className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                                  >
+                                    Từ chối
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            className={`px-4 py-2.5 text-sm leading-relaxed ${
+                              isMe
+                                ? "bg-teal-700 text-white rounded-2xl rounded-tr-sm"
+                                : "bg-slate-100 text-slate-900 rounded-2xl rounded-tl-sm"
+                            } ${m._optimistic ? "opacity-60" : ""}`}
+                          >
+                            {m.text}
+                          </div>
+                        );
+                      })()}
                       <div className={`text-[11px] text-slate-400 mt-1 ${isMe ? "text-right" : "text-left"}`}>
                         {m.created_at
                           ? new Date(m.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
@@ -815,6 +1005,77 @@ export default function MessagesScreen() {
                     </>
                   ) : (
                     <>Gửi khiếu nại</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Đánh giá người bán */}
+      {showRatingModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">⭐ Đánh giá Người bán</h3>
+              <button
+                onClick={() => { setShowRatingModal(false); setRatingValue(5); }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 text-center">
+              <p className="text-sm text-slate-600 mb-6">
+                Vui lòng chấm điểm chất lượng và thái độ của người bán đối với đơn hàng này.
+              </p>
+              
+              <div className="flex items-center justify-center gap-2 mb-6">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRatingValue(star)}
+                    className="text-4xl transition-transform hover:scale-110 duration-150 focus:outline-none"
+                  >
+                    <span className={star <= ratingValue ? "text-yellow-400" : "text-slate-300"}>★</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="text-sm font-semibold text-slate-700 mb-6">
+                {ratingValue === 5 && "🤩 Tuyệt vời - Rất hài lòng!"}
+                {ratingValue === 4 && "😊 Tốt - Khá hài lòng"}
+                {ratingValue === 3 && "😐 Bình thường"}
+                {ratingValue === 2 && "🙁 Chưa tốt"}
+                {ratingValue === 1 && "😡 Tệ - Rất không hài lòng"}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowRatingModal(false); setRatingValue(5); }}
+                  className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors text-sm"
+                >
+                  Bỏ qua
+                </button>
+                <button
+                  onClick={handleRateSeller}
+                  disabled={ratingSubmitting}
+                  className="flex-1 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white font-semibold rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  {ratingSubmitting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Đang gửi...
+                    </>
+                  ) : (
+                    <>Gửi đánh giá</>
                   )}
                 </button>
               </div>
