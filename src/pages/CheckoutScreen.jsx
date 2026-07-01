@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
 import { createTransaction, processWalletPayment, createPayOSCheckoutLink } from "../services/payment";
 import { getMeetupSpots, getDefaultMeetupSpots } from "../utils/campusMeetup";
+import VerificationGate from "../components/sell/VerificationGate";
 
 // ─── Cấu hình phương thức vận chuyển ───────────────────────────────────────
 const DELIVERY_METHODS = [
@@ -207,18 +208,7 @@ export default function CheckoutScreen() {
     );
   }
 
-  if (userData.status === 'inactive') {
-    return (
-      <div className="max-w-2xl mx-auto py-16 text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-50 rounded-full mb-4 text-amber-500 shadow-sm">
-          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-        </div>
-        <h2 className="text-xl font-bold text-slate-800 mb-2">Tài khoản chưa được kích hoạt</h2>
-        <p className="text-slate-500 text-sm mb-5 max-w-md mx-auto">Tài khoản của bạn đang chờ phê duyệt thẻ sinh viên để thực hiện mua sách.</p>
-        <button onClick={() => navigate("/")} className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</button>
-      </div>
-    );
-  }
+
 
   if (userData.status === 'suspended') {
     return (
@@ -254,7 +244,8 @@ export default function CheckoutScreen() {
   const imgSrc = book.images?.[0] || book.image || null;
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
+    <VerificationGate>
+      <div className="max-w-2xl mx-auto py-8 px-4">
       {/* Header */}
       <div className="mb-6">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-teal-700 transition-colors mb-3">
@@ -507,5 +498,6 @@ export default function CheckoutScreen() {
         <span className="underline cursor-pointer">Chính sách hoàn tiền</span> của LoopBook
       </p>
     </div>
+    </VerificationGate>
   );
 }

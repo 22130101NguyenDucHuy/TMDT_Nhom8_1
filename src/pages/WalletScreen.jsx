@@ -4,6 +4,7 @@ import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
 import { depositWallet, withdrawWallet, createPayOSDepositLink, checkPayOSPaymentStatus } from "../services/payment";
+import VerificationGate from "../components/sell/VerificationGate";
 
 export default function WalletScreen() {
   const { userData, showToast } = useAuth();
@@ -174,6 +175,19 @@ export default function WalletScreen() {
     );
   }
 
+  if (userData.status === 'suspended') {
+    return (
+      <div className="max-w-4xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-6 text-red-500 shadow-sm">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">Tài khoản đã bị khóa</h2>
+        <p className="text-slate-600 mb-6 max-w-md mx-auto">Tài khoản của bạn đã bị khóa do vi phạm chính sách của LoopBook.</p>
+        <Link to="/" className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</Link>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -185,7 +199,8 @@ export default function WalletScreen() {
   const balance = wallet?.balance || 0;
 
   return (
-    <div className="max-w-4xl mx-auto py-6 flex flex-col gap-6">
+    <VerificationGate>
+      <div className="max-w-4xl mx-auto py-6 flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-teal-700 uppercase tracking-wider mb-1">Tài chính</p>
@@ -396,5 +411,6 @@ export default function WalletScreen() {
         </div>
       )}
     </div>
+    </VerificationGate>
   );
 }

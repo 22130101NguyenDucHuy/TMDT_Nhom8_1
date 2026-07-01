@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice, formatPriceInput } from "../utils/formatters";
+import VerificationGate from "../components/sell/VerificationGate";
 
 const conditionOptions = [
   { id: "any", label: "Bất kỳ" },
@@ -113,7 +114,7 @@ export default function BookRequestScreen() {
     return opt ? opt.label : c;
   };
 
-  return (
+  const content = (
     <div className="max-w-4xl mx-auto py-8">
       <div className="mb-8">
         <p className="text-sm font-semibold text-teal-700 uppercase tracking-wider mb-1">Yêu cầu sách</p>
@@ -301,4 +302,22 @@ export default function BookRequestScreen() {
       </div>
     </div>
   );
+
+  if (user) {
+    if (userData && userData.status === 'suspended') {
+      return (
+        <div className="max-w-4xl mx-auto py-16 text-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-6 text-red-500 shadow-sm">
+            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">Tài khoản đã bị khóa</h2>
+          <p className="text-slate-600 mb-6 max-w-md mx-auto">Tài khoản của bạn đã bị khóa do vi phạm chính sách của LoopBook.</p>
+          <button onClick={() => navigate("/")} className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</button>
+        </div>
+      );
+    }
+    return <VerificationGate>{content}</VerificationGate>;
+  }
+
+  return content;
 }

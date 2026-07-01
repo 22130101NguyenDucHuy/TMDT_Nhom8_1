@@ -106,16 +106,11 @@ export default function VerificationGate({ children }) {
         .upload(fileName, studentCard);
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from("student-verification")
-        .getPublicUrl(fileName);
-      const imageUrl = urlData.publicUrl;
-
       const { error: insertError } = await supabase
         .from("lb_student_verifications")
         .insert([{
           user_id: user.id,
-          image_path: imageUrl,
+          image_path: fileName,
           status: "pending",
         }]);
       if (insertError) throw insertError;

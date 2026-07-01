@@ -876,7 +876,7 @@ export async function markNotificationRead(notificationId) {
 
 export async function getVerifications(filters = {}, page = 1, perPage = 20) {
   try {
-    let query = supabase.from('lb_student_verifications').select('id, user_id, status, created_at', { count: 'exact' });
+    let query = supabase.from('lb_student_verifications').select('id, user_id, status, image_path, created_at', { count: 'exact' });
     if (filters.status) query = query.eq('status', filters.status);
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
@@ -896,6 +896,10 @@ export async function getVerifications(filters = {}, page = 1, perPage = 20) {
 
     const enriched = (data || []).map(r => ({
       ...r,
+      user: userMap[r.user_id] ? {
+        name: userMap[r.user_id].name,
+        email: userMap[r.user_id].email
+      } : null,
       user_name: userMap[r.user_id]?.name || '—',
       user_email: userMap[r.user_id]?.email || '—',
       submitted_date: r.created_at?.split('T')[0],
