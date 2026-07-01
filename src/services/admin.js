@@ -780,6 +780,43 @@ export async function getPromoCampaign() {
   }
 }
 
+const INSIGHT_ACTIONS_KEY = 'admin_insight_actions';
+
+export async function getInsightActions() {
+  const defaults = { demand: false, vip: false, campaign: false };
+  try {
+    const [{ data }, campaignActive] = await Promise.all([
+      supabase.from('lb_settings').select('value').eq('key', INSIGHT_ACTIONS_KEY).maybeSingle(),
+      getPromoCampaign(),
+    ]);
+    let actions = { ...defaults };
+    if (data?.value) {
+      try {
+        actions = { ...defaults, ...JSON.parse(data.value) };
+      } catch { /* ignore invalid JSON */ }
+    }
+    actions.campaign = campaignActive || actions.campaign;
+    return actions;
+  } catch (err) {
+    console.warn('getInsightActions fallback:', err.message);
+    return defaults;
+  }
+}
+
+export async function saveInsightActions(actions) {
+  const { error } = await supabase
+    .from('lb_settings')
+    .upsert({
+      key: INSIGHT_ACTIONS_KEY,
+      value: JSON.stringify(actions),
+      group_name: 'admin',
+      is_public: false,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+  if (error) throw error;
+  return true;
+}
+
 export async function getRealAdminAnalytics() {
   const analytics = {
     sellerMetrics: {
@@ -1027,6 +1064,6 @@ export default {
   getFeeConfigs, updateFeeConfig,
   getNotifications, markNotificationRead,
   getVerifications, approveVerification, rejectVerification,
-  createSystemNotification, setPromoCampaign, getPromoCampaign,
+  createSystemNotification, setPromoCampaign, getPromoCampaign, getInsightActions, saveInsightActions,
   getWithdrawals, approveWithdrawal, rejectWithdrawal,
 };
