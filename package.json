@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:payment": "npm run dev --prefix server-payment",
+    "install:payment": "npm install --prefix server-payment",
     "build": "vite build",
     "preview": "vite preview"
   },
