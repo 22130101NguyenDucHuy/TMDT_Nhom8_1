@@ -7,6 +7,7 @@ import VerificationManagement from "./components/admin/VerificationManagement";
 import ListingManagement from "./components/admin/ListingManagement";
 import CategoryManagement from "./components/admin/CategoryManagement";
 import TransactionManagement from "./components/admin/TransactionManagement";
+import WithdrawalManagement from "./components/admin/WithdrawalManagement";
 import PremiumManagement from "./components/admin/PremiumManagement";
 import CheckoutScreen from "./pages/CheckoutScreen";
 import TransactionSuccessScreen from "./pages/TransactionSuccessScreen";
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="listings" element={<ListingManagement />} />
           <Route path="categories" element={<CategoryManagement />} />
           <Route path="transactions" element={<TransactionManagement />} />
+          <Route path="withdrawals" element={<WithdrawalManagement />} />
           <Route path="premium" element={<PremiumManagement />} />
           <Route path="disputes" element={<DisputeManagement />} />
           <Route path="reports" element={<ReportManagement />} />

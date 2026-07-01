@@ -949,6 +949,91 @@ export async function rejectVerification(id, userId) {
   }
 }
 
+export async function getWithdrawals(filters = {}, page = 1, perPage = 20) {
+  try {
+    let query = supabase.from('lb_withdrawals').select('id, user_id, amount, bank_name, account_number, account_holder, status, created_at', { count: 'exact' });
+    if (filters.status) query = query.eq('status', filters.status);
+    
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
+    const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const userIds = [...new Set((data || []).map(r => r.user_id).filter(Boolean))];
+    let userMap = {};
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('lb_users')
+        .select('id, name, email')
+        .in('id', userIds);
+      (users || []).forEach(u => { userMap[u.id] = u; });
+    }
+
+    const enriched = (data || []).map(r => ({
+      ...r,
+      user_name: userMap[r.user_id]?.name || '—',
+      user_email: userMap[r.user_id]?.email || '—',
+      amount: Number(r.amount) || 0,
+    }));
+
+    return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
+  } catch (err) {
+    console.error('getWithdrawals error:', err);
+    throw err;
+  }
+}
+
+export async function approveWithdrawal(id) {
+  try {
+    const { error } = await supabase
+      .from('lb_withdrawals')
+      .update({ status: 'approved', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('approveWithdrawal error:', err);
+    throw err;
+  }
+}
+
+export async function rejectWithdrawal(id, userId, amount) {
+  try {
+    const { error: wErr } = await supabase
+      .from('lb_withdrawals')
+      .update({ status: 'rejected', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (wErr) throw wErr;
+
+    const { data: wallet, error: walletErr } = await supabase
+      .from('lb_wallets')
+      .select('balance, total_out')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (walletErr) throw walletErr;
+
+    if (wallet) {
+      const newBalance = (wallet.balance || 0) + Number(amount);
+      const newTotalOut = Math.max(0, (wallet.total_out || 0) - Number(amount));
+      
+      const { error: uErr } = await supabase
+        .from('lb_wallets')
+        .update({
+          balance: newBalance,
+          total_out: newTotalOut,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId);
+      if (uErr) throw uErr;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('rejectWithdrawal error:', err);
+    throw err;
+  }
+}
+
 export default {
   getUsers, getUserById, updateUserStatus, updateUserRole, updateUserProfile, createUser,
   getListings, getListingById, updateListingStatus, deleteListing,
@@ -963,4 +1048,5 @@ export default {
   getFeeConfigs, updateFeeConfig,
   getNotifications, markNotificationRead,
   getVerifications, approveVerification, rejectVerification,
+  getWithdrawals, approveWithdrawal, rejectWithdrawal,
 };

@@ -46,6 +46,9 @@ export default function AdminLayout() {
             <NavLink to="/admin/transactions" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
               Giao Dịch
             </NavLink>
+            <NavLink to="/admin/withdrawals" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
+              Rút Tiền
+            </NavLink>
             <NavLink to="/admin/premium" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
               Premium
             </NavLink>
