@@ -1,6 +1,7 @@
 import { Suspense } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import BrandLogo from "../common/BrandLogo";
+import { useAuth } from "../../contexts/AuthContext";
 import "./AdminLayout.css";
 
 function AdminContentFallback() {
@@ -12,6 +13,18 @@ function AdminContentFallback() {
 }
 
 export default function AdminLayout() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate("/");
+    } catch (err) {
+      console.error("Lỗi khi đăng xuất admin:", err);
+    }
+  };
+
   return (
     <div className="admin-container">
       <aside className="admin-sidebar">
@@ -46,6 +59,9 @@ export default function AdminLayout() {
             <NavLink to="/admin/transactions" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
               Giao Dịch
             </NavLink>
+            <NavLink to="/admin/withdrawals" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
+              Rút Tiền
+            </NavLink>
             <NavLink to="/admin/premium" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
               Premium
             </NavLink>
@@ -66,9 +82,20 @@ export default function AdminLayout() {
             <NavLink to="/admin/settings" className={({ isActive }) => isActive ? "admin-nav-link active" : "admin-nav-link"}>
               Cài Đặt
             </NavLink>
-            <NavLink to="/" className="admin-nav-link">
-              Quay Lại
-            </NavLink>
+            <button
+              onClick={handleLogout}
+              className="admin-nav-link"
+              style={{
+                width: "100%",
+                textAlign: "left",
+                background: "none",
+                border: "none",
+                fontFamily: "inherit",
+                cursor: "pointer",
+              }}
+            >
+              Đăng Xuất
+            </button>
           </div>
         </nav>
       </aside>

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
-import { releaseEscrow, openDispute, cancelTransaction } from "../services/payment";
+import { releaseEscrow, openDispute, cancelTransaction, submitSellerRating } from "../services/payment";
 import VerificationGate from "../components/sell/VerificationGate";
 
 const statusConfig = {
@@ -32,6 +32,12 @@ export default function MyTransactionsScreen() {
   const [disputeTxnId, setDisputeTxnId] = useState(null);
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeLoading, setDisputeLoading] = useState(false);
+
+  // Rating states
+  const [ratingTxn, setRatingTxn] = useState(null);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   useEffect(() => {
     if (!userData) {
@@ -94,6 +100,28 @@ export default function MyTransactionsScreen() {
       showToast(err.message || "Có lỗi xảy ra khi hủy giao dịch", "error");
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleRateSeller = async () => {
+    if (!ratingTxn) return;
+    setRatingSubmitting(true);
+    try {
+      await submitSellerRating(ratingTxn.id, ratingTxn.seller_id, ratingValue);
+      showToast("Cảm ơn bạn đã đánh giá người bán!", "success");
+      setShowRatingModal(false);
+      setRatingTxn(null);
+      
+      const { data } = await supabase
+        .from("lb_transactions")
+        .select("*, book:book_id(title)")
+        .or(`buyer_id.eq.${userData.id},seller_id.eq.${userData.id}`)
+        .order("created_at", { ascending: false });
+      setTransactions(data || []);
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra khi đánh giá", "error");
+    } finally {
+      setRatingSubmitting(false);
     }
   };
 
@@ -283,6 +311,14 @@ export default function MyTransactionsScreen() {
                           {txn.status === 'completed' && (
                             <span className="text-xs text-green-600 font-medium">✓ Đã hoàn tất</span>
                           )}
+                          {txn.status === 'completed' && isBuyer && !txn.notes?.includes('|rated:true') && (
+                            <button
+                              onClick={() => { setRatingTxn(txn); setRatingValue(5); setShowRatingModal(true); }}
+                              className="px-3 py-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1 mt-1.5"
+                            >
+                              ★ Đánh giá người bán
+                            </button>
+                          )}
                           {txn.status === 'disputed' && (
                             <span className="text-xs text-orange-600 font-medium">⚠ Đang xử lý khiếu nại</span>
                           )}
@@ -346,6 +382,77 @@ export default function MyTransactionsScreen() {
                     </>
                   ) : (
                     <>Gửi khiếu nại</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Đánh giá người bán */}
+      {showRatingModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">⭐ Đánh giá Người bán</h3>
+              <button
+                onClick={() => { setShowRatingModal(false); setRatingValue(5); setRatingTxn(null); }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 text-center">
+              <p className="text-sm text-slate-600 mb-6">
+                Vui lòng chấm điểm chất lượng và thái độ của người bán đối với đơn hàng này.
+              </p>
+              
+              <div className="flex items-center justify-center gap-2 mb-6">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRatingValue(star)}
+                    className="text-4xl transition-transform hover:scale-110 duration-150 focus:outline-none"
+                  >
+                    <span className={star <= ratingValue ? "text-yellow-400" : "text-slate-300"}>★</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="text-sm font-semibold text-slate-700 mb-6">
+                {ratingValue === 5 && "🤩 Tuyệt vời - Rất hài lòng!"}
+                {ratingValue === 4 && "😊 Tốt - Khá hài lòng"}
+                {ratingValue === 3 && "😐 Bình thường"}
+                {ratingValue === 2 && "🙁 Chưa tốt"}
+                {ratingValue === 1 && "😡 Tệ - Rất không hài lòng"}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowRatingModal(false); setRatingValue(5); setRatingTxn(null); }}
+                  className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors text-sm"
+                >
+                  Bỏ qua
+                </button>
+                <button
+                  onClick={handleRateSeller}
+                  disabled={ratingSubmitting}
+                  className="flex-1 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white font-semibold rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  {ratingSubmitting ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Đang gửi...
+                    </>
+                  ) : (
+                    <>Gửi đánh giá</>
                   )}
                 </button>
               </div>

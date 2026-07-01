@@ -1,15 +1,20 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function AuthModal() {
   const { isAuthModalOpen, authModalMode, setAuthModalMode, closeAuthModal, showToast, signInWithOAuth, isEduEmail } = useAuth();
+  const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [verificationStep, setVerificationStep] = useState(false);
   const [verificationFile, setVerificationFile] = useState(null);
@@ -39,11 +44,27 @@ export default function AuthModal() {
 
     try {
       if (authModalMode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: authData, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+
+        // Kiểm tra vai trò để điều hướng ngay lập tức
+        if (authData?.user) {
+          const { data: userRec } = await supabase
+            .from('lb_users')
+            .select('role')
+            .eq('id', authData.user.id)
+            .maybeSingle();
+          
+          if (userRec && ["admin", "moderator"].includes(userRec.role)) {
+            showToast("Đăng nhập Admin thành công!", "success");
+            closeAuthModal();
+            navigate("/admin");
+            return;
+          }
+        }
 
         showToast("Đăng nhập thành công!", "success");
         closeAuthModal();
@@ -246,27 +267,55 @@ export default function AuthModal() {
 
               <div>
                 <label className="vinted-label">Mật khẩu</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Nhập mật khẩu của bạn"
-                  className="vinted-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="Nhập mật khẩu của bạn"
+                    className="vinted-input pr-10"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={() => setShowPassword(true)}
+                    onMouseUp={() => setShowPassword(false)}
+                    onMouseLeave={() => setShowPassword(false)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               {authModalMode === "register" && (
                 <div>
                   <label className="vinted-label">Xác nhận mật khẩu</label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Nhập lại mật khẩu"
-                    className="vinted-input"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      required
+                      placeholder="Nhập lại mật khẩu"
+                      className="vinted-input pr-10"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={() => setShowConfirmPassword(true)}
+                      onMouseUp={() => setShowConfirmPassword(false)}
+                      onMouseLeave={() => setShowConfirmPassword(false)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -304,19 +353,7 @@ export default function AuthModal() {
                   </svg>
                   {authModalMode === "login" ? "Đăng nhập" : "Đăng ký"} với Google
                 </button>
-                <button
-                  type="button"
-                  onClick={() => signInWithOAuth('azure')}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 21 21" fill="none">
-                    <rect x="1" y="1" width="8" height="8" rx="1.5" fill="#F25022"/>
-                    <rect x="12" y="1" width="8" height="8" rx="1.5" fill="#7FBA00"/>
-                    <rect x="1" y="12" width="8" height="8" rx="1.5" fill="#00A4EF"/>
-                    <rect x="12" y="12" width="8" height="8" rx="1.5" fill="#FFB900"/>
-                  </svg>
-                  {authModalMode === "login" ? "Đăng nhập" : "Đăng ký"} với Microsoft
-                </button>
+
               </div>
             </form>
           )}

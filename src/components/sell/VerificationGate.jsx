@@ -6,7 +6,7 @@ import { isAcademicEmail, getInstitutionName } from "../../utils/academicDomains
 const VERIFICATION_EXPIRY_DAYS = 30;
 
 export default function VerificationGate({ children }) {
-  const { user, userData, showToast, updateProfile } = useAuth();
+  const { user, userData, showToast } = useAuth();
   const [status, setStatus] = useState("checking");
   const [studentCard, setStudentCard] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -22,27 +22,30 @@ export default function VerificationGate({ children }) {
     setStatus("checking");
 
     try {
+      const { data: freshUserData } = await supabase
+        .from("lb_users")
+        .select("role, status")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const currentUserData = freshUserData || userData;
+
       // Admin bypass — không cần xác thực sinh viên
-      if (userData?.role === "admin") {
+      if (currentUserData?.role === "admin") {
         setStatus("verified");
         return;
       }
 
       // Nếu tài khoản đã active (admin đã duyệt), bỏ qua gate
-      if (userData?.status === "active") {
+      if (currentUserData?.status === "active") {
         setStatus("verified");
         return;
       }
 
-      // 1. Check academic email
+      // 1. Email học thuật chỉ dùng để hiển thị, không được chặn bản ghi đã được admin duyệt.
       const email = user.email || "";
       const academic = isAcademicEmail(email);
-      if (!academic) {
-        setStatus("unverified");
-        setInstitution("Không xác định (email ngoài danh sách)");
-        return;
-      }
-      setInstitution(getInstitutionName(email));
+      setInstitution(academic ? getInstitutionName(email) : "Không xác định (email ngoài danh sách)");
 
       // 2. Check verification records
       const { data: verifications, error: vErr } = await supabase

@@ -1,26 +1,47 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useLocation, Link } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, Link, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import AuthModal from "../auth/AuthModal";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../services/supabase";
 
+// Helper tự động tải lại trang khi gặp lỗi load chunk (do thay đổi mã hash khi deploy bản build mới trên Vercel)
+function lazyWithRetry(componentImport) {
+  return lazy(async () => {
+    try {
+      return await componentImport();
+    } catch (error) {
+      const retryKey = `loopbook_lazy_retry:${window.location.pathname}`;
+      const hasRetried = sessionStorage.getItem(retryKey) === "true";
+
+      if (!hasRetried) {
+        sessionStorage.setItem(retryKey, "true");
+        window.location.reload();
+        return new Promise(() => {}); // prevent loading broken state before reload
+      }
+
+      sessionStorage.removeItem(retryKey);
+      throw error;
+    }
+  });
+}
+
 // ── Lazy load tất cả pages — mỗi route chỉ tải JS khi cần ─────────────────
-const HomeScreen             = lazy(() => import("../../pages/HomeScreen"));
-const ExploreScreen          = lazy(() => import("../../pages/ExploreScreen"));
-const BookDetailScreen       = lazy(() => import("../../pages/BookDetailScreen"));
-const SellScreen             = lazy(() => import("../../pages/SellScreen"));
-const EditListingScreen      = lazy(() => import("../../pages/EditListingScreen"));
-const MessagesScreen         = lazy(() => import("../../pages/MessagesScreen"));
-const WalletScreen           = lazy(() => import("../../pages/WalletScreen"));
-const CheckoutScreen         = lazy(() => import("../../pages/CheckoutScreen"));
-const TransactionSuccessScreen = lazy(() => import("../../pages/TransactionSuccessScreen"));
-const MyTransactionsScreen   = lazy(() => import("../../pages/MyTransactionsScreen"));
-const PremiumScreen          = lazy(() => import("../../pages/PremiumScreen"));
-const DashboardScreen        = lazy(() => import("../../pages/DashboardScreen"));
-const ProfileScreen          = lazy(() => import("../../pages/ProfileScreen"));
-const FavoritesScreen        = lazy(() => import("../../pages/FavoritesScreen"));
-const BookRequestScreen      = lazy(() => import("../../pages/BookRequestScreen"));
+const HomeScreen             = lazyWithRetry(() => import("../../pages/HomeScreen"));
+const ExploreScreen          = lazyWithRetry(() => import("../../pages/ExploreScreen"));
+const BookDetailScreen       = lazyWithRetry(() => import("../../pages/BookDetailScreen"));
+const SellScreen             = lazyWithRetry(() => import("../../pages/SellScreen"));
+const EditListingScreen      = lazyWithRetry(() => import("../../pages/EditListingScreen"));
+const MessagesScreen         = lazyWithRetry(() => import("../../pages/MessagesScreen"));
+const WalletScreen           = lazyWithRetry(() => import("../../pages/WalletScreen"));
+const CheckoutScreen         = lazyWithRetry(() => import("../../pages/CheckoutScreen"));
+const TransactionSuccessScreen = lazyWithRetry(() => import("../../pages/TransactionSuccessScreen"));
+const MyTransactionsScreen   = lazyWithRetry(() => import("../../pages/MyTransactionsScreen"));
+const PremiumScreen          = lazyWithRetry(() => import("../../pages/PremiumScreen"));
+const DashboardScreen        = lazyWithRetry(() => import("../../pages/DashboardScreen"));
+const ProfileScreen          = lazyWithRetry(() => import("../../pages/ProfileScreen"));
+const FavoritesScreen        = lazyWithRetry(() => import("../../pages/FavoritesScreen"));
+const BookRequestScreen      = lazyWithRetry(() => import("../../pages/BookRequestScreen"));
 
 // ── Fallback spinner dùng chung ────────────────────────────────────────────
 function PageLoader() {
@@ -33,8 +54,17 @@ function PageLoader() {
 
 export default function AppShell() {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, userData, loading } = useAuth();
+  const navigate = useNavigate();
   const [notification, setNotification] = useState(null);
+
+  useEffect(() => {
+    if (!loading && userData && ["admin", "moderator"].includes(userData.role)) {
+      if (location.pathname === "/") {
+        navigate("/admin", { replace: true });
+      }
+    }
+  }, [userData, loading, navigate, location.pathname]);
 
   useEffect(() => {
     if (!user) {

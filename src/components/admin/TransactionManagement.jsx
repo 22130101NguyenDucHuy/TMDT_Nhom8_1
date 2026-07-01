@@ -220,7 +220,7 @@ export default function TransactionManagement() {
               </tr>
             ))}
             {txList.length === 0 && (
-              <tr><td colSpan="7" style={{ textAlign: "center", padding: "32px", color: "#56647e" }}>Chưa có giao dịch nào</td></tr>
+              <tr><td colSpan="6" style={{ textAlign: "center", padding: "32px", color: "#56647e" }}>Chưa có giao dịch nào</td></tr>
             )}
           </tbody>
         </table>

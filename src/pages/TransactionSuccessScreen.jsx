@@ -176,7 +176,7 @@ export default function TransactionSuccessScreen() {
             txn.payment_method === "wallet" ? "Ví LoopBook"
             : txn.payment_method === "payos" ? "Cổng thanh toán PayOS (VietQR)"
             : txn.payment_method === "cash" ? "Tiền mặt (COD)"
-            : txn.payment_method === "bank_transfer" ? "Chuyển khoản ngân hàng"
+            : txn.payment_method === "cash" ? "Tiền mặt (COD)"
             : txn.payment_method || "—"
           } />
           <Row label="Vận chuyển" value={DELIVERY_LABELS[txn.delivery_method] || "Gặp trực tiếp"} />

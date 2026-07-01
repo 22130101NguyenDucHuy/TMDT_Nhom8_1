@@ -10,17 +10,38 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const payos = new PayOS({
-  clientId: process.env.PAYOS_CLIENT_ID,
-  apiKey: process.env.PAYOS_API_KEY,
-  checksumKey: process.env.PAYOS_CHECKSUM_KEY,
-});
+let payos = null;
+try {
+  if (process.env.PAYOS_CLIENT_ID && process.env.PAYOS_API_KEY && process.env.PAYOS_CHECKSUM_KEY) {
+    payos = new PayOS({
+      clientId: process.env.PAYOS_CLIENT_ID,
+      apiKey: process.env.PAYOS_API_KEY,
+      checksumKey: process.env.PAYOS_CHECKSUM_KEY,
+    });
+  } else {
+    console.warn('[PayOS] Cảnh báo: Thiếu thông tin cấu hình PayOS trong biến môi trường.');
+  }
+} catch (err) {
+  console.error('[PayOS] Lỗi khởi tạo PayOS SDK:', err.message);
+}
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://ehvgtgzleukxtqgstivd.supabase.co';
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabase = null;
+try {
+  if (supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+  } else {
+    console.warn('[Supabase] Cảnh báo: Thiếu URL hoặc Anon Key trong biến môi trường.');
+  }
+} catch (err) {
+  console.error('[Supabase] Lỗi khởi tạo Supabase client:', err.message);
+}
 
 async function fulfillPayment(orderCode) {
+  if (!supabase) {
+    throw new Error('Supabase client chưa được khởi tạo');
+  }
   try {
     console.log(`[PayOS] Bắt đầu xử lý giải ngân cho đơn hàng: ${orderCode}`);
     const { data: transactions, error: searchErr } = await supabase
@@ -131,7 +152,27 @@ async function fulfillPayment(orderCode) {
   }
 }
 
+app.get('/api/payment/health', (req, res) => {
+  res.json({
+    supabase: !!supabase,
+    payos: !!payos,
+    env: {
+      has_supabase_url: !!process.env.VITE_SUPABASE_URL,
+      has_supabase_key: !!process.env.VITE_SUPABASE_ANON_KEY,
+      has_payos_client_id: !!process.env.PAYOS_CLIENT_ID,
+      has_payos_api_key: !!process.env.PAYOS_API_KEY,
+      has_payos_checksum_key: !!process.env.PAYOS_CHECKSUM_KEY,
+    }
+  });
+});
+
 app.post('/api/payment/create-payment-link', async (req, res) => {
+  if (!payos) {
+    return res.status(500).json({ error: 'Cổng thanh toán PayOS chưa được cấu hình. Vui lòng thiết lập biến môi trường PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.' });
+  }
+  if (!supabase) {
+    return res.status(500).json({ error: 'Supabase client chưa được cấu hình. Vui lòng kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.' });
+  }
   const { amount, userId, type, bookId, buyerName, buyerPhone, deliveryAddress, deliveryMethod, deliveryFee } = req.body;
 
   if (!amount || amount <= 0 || !userId) {
@@ -248,7 +289,7 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
       returnUrl,
     };
 
-    const paymentLink = await payos.paymentRequests.create(paymentData);
+    const paymentLink = await (payos.createPaymentLink ? payos.createPaymentLink(paymentData) : payos.paymentRequests.create(paymentData));
     res.json({ checkoutUrl: paymentLink.checkoutUrl, orderCode, txnId });
   } catch (err) {
     console.error('[PayOS] Lỗi tạo payment link:', err.message);
@@ -257,9 +298,12 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
 });
 
 app.get('/api/payment/check-payment/:orderCode', async (req, res) => {
+  if (!payos) {
+    return res.status(500).json({ error: 'Cổng thanh toán PayOS chưa được cấu hình.' });
+  }
   const { orderCode } = req.params;
   try {
-    const paymentInfo = await payos.paymentRequests.getPaymentLinkInformation(orderCode);
+    const paymentInfo = await (payos.getPaymentLinkInformation ? payos.getPaymentLinkInformation(orderCode) : payos.paymentRequests.getPaymentLinkInformation(orderCode));
     if (paymentInfo.status === 'PAID') {
       const result = await fulfillPayment(orderCode);
       return res.json({ status: 'PAID', result });
@@ -273,6 +317,9 @@ app.get('/api/payment/check-payment/:orderCode', async (req, res) => {
 });
 
 app.post('/api/payment/payos-webhook', async (req, res) => {
+  if (!payos) {
+    return res.status(500).send('PayOS not configured');
+  }
   try {
     const webhookData = payos.webhooks ? payos.webhooks.verify(req.body) : payos.verifyPaymentWebhookData(req.body);
 
@@ -291,6 +338,10 @@ app.post('/api/payment/payos-webhook', async (req, res) => {
 });
 
 const PORT = process.env.PAYMENT_PORT || 3002;
-app.listen(PORT, () => {
-  console.log(`PAYMENT SERVER RUNNING ON PORT ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`PAYMENT SERVER RUNNING ON PORT ${PORT}`);
+  });
+}
+
+module.exports = app;
