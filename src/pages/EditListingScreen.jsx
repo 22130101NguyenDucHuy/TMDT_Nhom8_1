@@ -362,6 +362,14 @@ export default function EditListingScreen() {
             <input type="text" value={price} onChange={e => setPrice(formatPriceInput(e.target.value))}
               className="vinted-input pr-10 text-lg font-bold text-teal-800 border-teal-200" placeholder="0" />
           </div>
+          {category && (
+            <p className="text-xs text-teal-700 font-medium mt-2 flex items-center gap-1.5 animate-in fade-in duration-200">
+              <svg className="w-4 h-4 text-teal-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              💡 Gợi ý: Các tài liệu cùng danh mục này thường được chốt đơn nhanh nhất trong khoảng 30.000đ - 50.000đ.
+            </p>
+          )}
         </div>
         <div className="mb-4">
           <label className="font-bold text-slate-900 block mb-2">Mô tả</label>

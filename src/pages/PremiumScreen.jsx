@@ -18,17 +18,31 @@ export default function PremiumScreen() {
   const [showBankInfo, setShowBankInfo] = useState(false);
   const [showCardForm, setShowCardForm] = useState(false);
   const [cardInfo, setCardInfo] = useState({ number: "", name: "", exp: "", cvv: "" });
+  const [promoActive, setPromoActive] = useState(false);
 
   useEffect(() => {
-    const fetchPlans = async () => {
-      const { data } = await supabase.from("lb_premium_plans").select("*");
-      if (data && data.length > 0) {
-        setPlans(data);
-        setSelectedPlan(data[0].id);
+    const fetchPlansAndPromo = async () => {
+      try {
+        const { data: plansData } = await supabase.from("lb_premium_plans").select("*");
+        if (plansData && plansData.length > 0) {
+          setPlans(plansData);
+          setSelectedPlan(plansData[0].id);
+        }
+        const { data: settingData } = await supabase
+          .from("lb_settings")
+          .select("value")
+          .eq("key", "promo_campaign_active")
+          .maybeSingle();
+        if (settingData) {
+          setPromoActive(settingData.value === 'true');
+        }
+      } catch (err) {
+        console.warn("fetchPlansAndPromo warning:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-    fetchPlans();
+    fetchPlansAndPromo();
   }, []);
 
   const selected = plans.find((plan) => plan.id === selectedPlan) ?? plans[0];
@@ -173,6 +187,23 @@ export default function PremiumScreen() {
         eyebrow="Premium"
         heading="Thanh toán dịch vụ đẩy tin"
       >
+      <div className="max-w-6xl mx-auto mt-4 px-4">
+        {promoActive && (
+          <div className="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 text-white rounded-2xl p-5 shadow-md relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4 animate-pulse">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
+            <div className="relative z-10 flex items-center gap-3">
+              <span className="text-3xl animate-bounce">🔥</span>
+              <div>
+                <h4 className="font-extrabold text-lg tracking-wide uppercase">SIÊU ƯU ĐÃI ĐANG DIỄN RA!</h4>
+                <p className="text-sm font-medium text-red-50 opacity-95 mt-0.5">Mua gói Combo Đẩy tin, nhận ngay thêm 2 lượt đẩy tin MIỄN PHÍ vào tài khoản!</p>
+              </div>
+            </div>
+            <div className="relative z-10 bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl border border-white/30 text-xs font-bold uppercase tracking-wider shadow-inner">
+              Khuyến mãi +2 lượt
+            </div>
+          </div>
+        )}
+      </div>
       <div className="py-6 flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto">
         <aside className="w-full lg:w-72 flex-shrink-0">
           <div className="sticky top-24 space-y-6">

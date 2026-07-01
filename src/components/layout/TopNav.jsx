@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import BrandLogo from "../common/BrandLogo";
 import { useAuth } from "../../contexts/AuthContext";
@@ -26,6 +26,71 @@ export default function TopNav() {
     if (e.key === "Enter" && searchQuery.trim()) {
       navigate(`/kham-pha?q=${encodeURIComponent(searchQuery.trim())}`);
       setSearchQuery("");
+    }
+  };
+
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
+  const fetchNotifications = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('lb_notifications')
+        .select('id, type, title, body, is_read, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      setNotifications(data || []);
+    } catch (err) {
+      console.warn("fetchNotifications error:", err);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+
+    if (!user) return;
+    const channel = supabase
+      .channel('realtime_notifications')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'lb_notifications',
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        fetchNotifications();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchNotifications]);
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const handleNotifClick = async (notif) => {
+    if (!notif.is_read) {
+      try {
+        await supabase.from('lb_notifications').update({ is_read: true, read_at: new Date().toISOString() }).eq('id', notif.id);
+        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+      } catch (err) {
+        console.warn("mark read error:", err);
+      }
+    }
+    setShowNotifDropdown(false);
+  };
+
+  const handleMarkAllRead = async () => {
+    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+    if (unreadIds.length === 0) return;
+    try {
+      await supabase.from('lb_notifications').update({ is_read: true, read_at: new Date().toISOString() }).in('id', unreadIds);
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch (err) {
+      console.warn("mark all read error:", err);
     }
   };
 
@@ -76,6 +141,65 @@ export default function TopNav() {
                   </svg>
                   <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                 </Link>
+
+                {/* Notification Bell */}
+                <div className="relative">
+                  <button 
+                    onClick={() => {
+                      setShowNotifDropdown(!showNotifDropdown);
+                      setShowUserMenu(false);
+                    }}
+                    className="relative p-2 text-slate-500 hover:text-teal-700 transition-colors focus:outline-none"
+                  >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center border border-white">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  
+                  {showNotifDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowNotifDropdown(false)} />
+                      <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-lg py-2 z-20 overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                          <span className="font-bold text-slate-900 text-sm">Thông báo</span>
+                          {unreadCount > 0 && (
+                            <button 
+                              onClick={handleMarkAllRead}
+                              className="text-xs text-teal-600 hover:text-teal-700 font-semibold focus:outline-none"
+                            >
+                              Đọc tất cả
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                          {notifications.length === 0 ? (
+                            <div className="px-4 py-6 text-center text-slate-400 text-xs">Chưa có thông báo nào</div>
+                          ) : (
+                            notifications.map(notif => (
+                              <div 
+                                key={notif.id}
+                                onClick={() => handleNotifClick(notif)}
+                                className={`px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer text-left ${!notif.is_read ? 'bg-teal-50/30' : ''}`}
+                              >
+                                <div className="flex items-start justify-between gap-1">
+                                  <p className={`text-xs text-slate-800 font-semibold ${!notif.is_read ? 'text-slate-950 font-bold' : ''}`}>{notif.title}</p>
+                                  {!notif.is_read && <span className="w-1.5 h-1.5 bg-teal-600 rounded-full flex-shrink-0 mt-1"></span>}
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{notif.body}</p>
+                                <p className="text-[9px] text-slate-400 mt-1">{new Date(notif.created_at).toLocaleString("vi-VN")}</p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </>
             )}
 

@@ -953,6 +953,59 @@ export async function rejectVerification(id, userId) {
   }
 }
 
+export async function createSystemNotification(userId, title, body, type = 'system') {
+  try {
+    const { data, error } = await supabase
+      .from('lb_notifications')
+      .insert([{
+        user_id: userId,
+        type,
+        title,
+        body,
+        is_read: false,
+        created_at: new Date().toISOString()
+      }])
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('createSystemNotification error:', err);
+    throw err;
+  }
+}
+
+export async function setPromoCampaign(active) {
+  try {
+    const { data, error } = await supabase
+      .from('lb_settings')
+      .upsert([
+        { key: 'promo_campaign_active', value: String(active), group_name: 'general', is_public: true }
+      ], { onConflict: 'key' })
+      .select();
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.warn('setPromoCampaign database fallback:', err.message);
+    return true;
+  }
+}
+
+export async function getPromoCampaign() {
+  try {
+    const { data, error } = await supabase
+      .from('lb_settings')
+      .select('value')
+      .eq('key', 'promo_campaign_active')
+      .maybeSingle();
+    if (error) throw error;
+    return data ? data.value === 'true' : false;
+  } catch (err) {
+    console.warn('getPromoCampaign database fallback:', err.message);
+    return false;
+  }
+}
+
 export default {
   getUsers, getUserById, updateUserStatus, updateUserRole, updateUserProfile, createUser,
   getListings, getListingById, updateListingStatus, deleteListing,
@@ -967,4 +1020,5 @@ export default {
   getFeeConfigs, updateFeeConfig,
   getNotifications, markNotificationRead,
   getVerifications, approveVerification, rejectVerification,
+  createSystemNotification, setPromoCampaign, getPromoCampaign,
 };

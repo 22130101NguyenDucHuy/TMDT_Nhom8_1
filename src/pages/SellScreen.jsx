@@ -555,7 +555,15 @@ export default function SellScreen() {
                      placeholder="0"
                   />
                </div>
-               {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price}</p>}
+                {category && (
+                   <p className="text-xs text-teal-700 font-medium mt-2 flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-teal-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      💡 Gợi ý: Các tài liệu cùng danh mục này thường được chốt đơn nhanh nhất trong khoảng 30.000đ - 50.000đ.
+                   </p>
+                )}
+                {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price}</p>}
             </div>
 
             <div className="mb-6">
