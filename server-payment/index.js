@@ -27,9 +27,21 @@ try {
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://ehvgtgzleukxtqgstivd.supabase.co';
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabase = null;
+try {
+  if (supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+  } else {
+    console.warn('[Supabase] Cảnh báo: Thiếu URL hoặc Anon Key trong biến môi trường.');
+  }
+} catch (err) {
+  console.error('[Supabase] Lỗi khởi tạo Supabase client:', err.message);
+}
 
 async function fulfillPayment(orderCode) {
+  if (!supabase) {
+    throw new Error('Supabase client chưa được khởi tạo');
+  }
   try {
     console.log(`[PayOS] Bắt đầu xử lý giải ngân cho đơn hàng: ${orderCode}`);
     const { data: transactions, error: searchErr } = await supabase
@@ -140,9 +152,26 @@ async function fulfillPayment(orderCode) {
   }
 }
 
+app.get('/api/payment/health', (req, res) => {
+  res.json({
+    supabase: !!supabase,
+    payos: !!payos,
+    env: {
+      has_supabase_url: !!process.env.VITE_SUPABASE_URL,
+      has_supabase_key: !!process.env.VITE_SUPABASE_ANON_KEY,
+      has_payos_client_id: !!process.env.PAYOS_CLIENT_ID,
+      has_payos_api_key: !!process.env.PAYOS_API_KEY,
+      has_payos_checksum_key: !!process.env.PAYOS_CHECKSUM_KEY,
+    }
+  });
+});
+
 app.post('/api/payment/create-payment-link', async (req, res) => {
   if (!payos) {
     return res.status(500).json({ error: 'Cổng thanh toán PayOS chưa được cấu hình. Vui lòng thiết lập biến môi trường PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.' });
+  }
+  if (!supabase) {
+    return res.status(500).json({ error: 'Supabase client chưa được cấu hình. Vui lòng kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY.' });
   }
   const { amount, userId, type, bookId, buyerName, buyerPhone, deliveryAddress, deliveryMethod, deliveryFee } = req.body;
 
