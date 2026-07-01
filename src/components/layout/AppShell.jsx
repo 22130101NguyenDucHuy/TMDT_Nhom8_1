@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import AuthModal from "../auth/AuthModal";
+import { useAuth } from "../../contexts/AuthContext";
 
 // Helper tự động tải lại trang khi gặp lỗi load chunk (do thay đổi mã hash khi deploy bản build mới trên Vercel)
 function lazyWithRetry(componentImport) {
@@ -45,6 +46,14 @@ function PageLoader() {
 
 export default function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { userData, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && userData && ["admin", "moderator"].includes(userData.role)) {
+      navigate("/admin", { replace: true });
+    }
+  }, [userData, loading, navigate]);
 
   useEffect(() => {
     const titles = {
