@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats, createSystemNotification, setPromoCampaign, getPromoCampaign, updateUserStatus, getRealAdminAnalytics } from "../../services/admin";
+import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats, createSystemNotification, setPromoCampaign, getInsightActions, saveInsightActions, updateUserStatus, getRealAdminAnalytics } from "../../services/admin";
 import { RevenueChart, CategoryDistributionChart, UserGrowthChart } from "./AdminCharts";
 import { supabase } from "../../services/supabase";
 
@@ -132,11 +132,19 @@ export default function AdminDashboard() {
     demand: false,
     vip: false,
     campaign: false,
-    boost1: false,
-    boost2: false,
-    boost3: false,
-    penalty: false
   });
+
+  useEffect(() => {
+    getInsightActions().then(setInsightActions).catch(() => {});
+  }, []);
+
+  const markInsightDone = async (updates) => {
+    setInsightActions(prev => {
+      const next = { ...prev, ...updates };
+      saveInsightActions(next).catch(err => console.warn('saveInsightActions:', err.message));
+      return next;
+    });
+  };
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -157,7 +165,7 @@ export default function AdminDashboard() {
           );
         }
       }
-      setInsightActions(prev => ({ ...prev, demand: true }));
+      await markInsightDone({ demand: true });
       showToast("Đã gửi thông báo đẩy đến các người bán ngành Toán & Kỹ thuật!");
     } catch (err) {
       showToast("Gửi thông báo thất bại: " + err.message);
@@ -183,7 +191,7 @@ export default function AdminDashboard() {
           'promotion'
         );
       }
-      setInsightActions(prev => ({ ...prev, vip: true }));
+      await markInsightDone({ vip: true });
       showToast("Đã gửi thư mời nâng cấp Hội viên VIP kèm ưu đãi đến tài khoản!");
     } catch (err) {
       showToast("Thực hiện thất bại: " + err.message);
@@ -204,7 +212,7 @@ export default function AdminDashboard() {
           );
         }
       }
-      setInsightActions(prev => ({ ...prev, campaign: true }));
+      await markInsightDone({ campaign: true });
       showToast("Đã kích hoạt Campaign khuyến mại mua 10 tặng 2 và thông báo cho Seller!");
     } catch (err) {
       showToast("Kích hoạt thất bại: " + err.message);
@@ -222,22 +230,22 @@ export default function AdminDashboard() {
           'system'
         );
       }
-      setInsightActions(prev => ({ ...prev, [actionKey]: true }));
+      await markInsightDone({ [actionKey]: true });
       showToast(`Đã tặng thành công 1 lượt đẩy tin miễn phí cho ${sellerName}!`);
     } catch (err) {
       showToast("Tặng thất bại: " + err.message);
     }
   };
 
-  const handleSellerPenalty = async (userName) => {
+  const handleSellerPenalty = async (userName, userId) => {
     if (!window.confirm(`Bạn có chắc muốn áp dụng hình phạt hạ hiển thị / khóa tài khoản đối với ${userName}?`)) return;
     try {
-      // BUG FIX: Không dùng hardcode 'u3', tìm ID thật theo tên hoặc fallback
-      const { data: users } = await supabase.from('lb_users').select('id').ilike('name', `%${userName}%`).limit(1);
-      let targetId = null;
-      if (users && users.length > 0) {
-        targetId = users[0].id;
-      } else {
+      let targetId = userId || null;
+      if (!targetId) {
+        const { data: users } = await supabase.from('lb_users').select('id').ilike('name', `%${userName}%`).limit(1);
+        if (users && users.length > 0) targetId = users[0].id;
+      }
+      if (!targetId) {
         const { data: anyUser } = await supabase.from('lb_users').select('id').limit(1);
         if (anyUser && anyUser.length > 0) targetId = anyUser[0].id;
       }
@@ -245,7 +253,7 @@ export default function AdminDashboard() {
       if (!targetId) throw new Error("Không tìm thấy user để khóa");
       
       await updateUserStatus(targetId, 'suspended');
-      setInsightActions(prev => ({ ...prev, penalty: true }));
+      await markInsightDone({ [`penalty_${targetId}`]: true });
       showToast(`Đã áp dụng hình phạt hạ hiển thị & khóa tài khoản đối với ${userName} thành công!`);
     } catch (err) {
       showToast("Áp dụng hình phạt thất bại: " + err.message);
@@ -523,12 +531,12 @@ export default function AdminDashboard() {
                       </td>
                       <td>
                         <button
-                          onClick={() => handleSellerPenalty(s.name)}
-                          disabled={insightActions.penalty}
+                          onClick={() => handleSellerPenalty(s.name, s.id)}
+                          disabled={insightActions[`penalty_${s.id}`]}
                           className="admin-btn"
                           style={{ fontSize: "12px", padding: "4px 10px", color: "#ef4444", borderColor: "#ef4444" }}
                         >
-                          Áp dụng hình phạt
+                          {insightActions[`penalty_${s.id}`] ? "✓ Đã xử lý" : "Áp dụng hình phạt"}
                         </button>
                       </td>
                     </tr>
