@@ -1050,12 +1050,189 @@ export async function getRealAdminAnalytics() {
   return analytics;
 }
 
+export async function resolveDisputeRefundBuyer(disputeId) {
+  // 1. Lấy thông tin khiếu nại và giao dịch liên quan
+  const { data: dispute, error: disputeErr } = await supabase
+    .from('lb_disputes')
+    .select('*, transaction:transaction_id(*)')
+    .eq('id', disputeId)
+    .single();
+  if (disputeErr) throw disputeErr;
+  if (!dispute) throw new Error('Không tìm thấy khiếu nại');
+  if (dispute.status === 'resolved') throw new Error('Khiếu nại đã được giải quyết trước đó');
+
+  const txn = dispute.transaction;
+  if (!txn) throw new Error('Không tìm thấy giao dịch liên quan');
+
+  // 2. Nếu thanh toán bằng Ví hoặc PayOS thì hoàn tiền cho người mua
+  if (txn.status === 'pending' && (txn.payment_method === 'wallet' || txn.payment_method === 'payos')) {
+    const totalAmount = Number(txn.amount) || 0;
+    const { data: buyerWallet, error: walletErr } = await supabase
+      .from('lb_wallets')
+      .select('*')
+      .eq('user_id', txn.buyer_id)
+      .maybeSingle();
+    if (walletErr) throw walletErr;
+
+    if (buyerWallet) {
+      const { error: refundErr } = await supabase
+        .from('lb_wallets')
+        .update({
+          balance: (buyerWallet.balance || 0) + totalAmount,
+          total_out: Math.max(0, (buyerWallet.total_out || 0) - totalAmount),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', txn.buyer_id);
+      if (refundErr) throw refundErr;
+    } else {
+      const { error: insertErr } = await supabase
+        .from('lb_wallets')
+        .insert([{
+          user_id: txn.buyer_id,
+          balance: totalAmount,
+          total_in: 0,
+          total_out: 0,
+          updated_at: new Date().toISOString()
+        }]);
+      if (insertErr) throw insertErr;
+    }
+  }
+
+  // 3. Cập nhật trạng thái giao dịch sang 'cancelled'
+  const newNotes = (txn.notes ? txn.notes + '|' : '') + `cancelled_by_admin:true|resolved_dispute:${disputeId}`;
+  const { error: updateTxnErr } = await supabase
+    .from('lb_transactions')
+    .update({
+      status: 'cancelled',
+      is_completed: false,
+      notes: newNotes,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', txn.id);
+  if (updateTxnErr) throw updateTxnErr;
+
+  // 4. Cập nhật trạng thái khiếu nại thành 'resolved' bằng hàm có sẵn
+  await updateDisputeStatus(disputeId, 'resolved', 'Hoàn tiền cho người mua (Admin xử lý)');
+
+  // 5. Gửi thông báo hệ thống
+  await createSystemNotification(
+    txn.buyer_id,
+    'Khiếu nại được giải quyết',
+    `Khiếu nại cho đơn hàng #${txn.id.slice(0, 8)} đã được giải quyết. Bạn được hoàn trả ${txn.amount}đ về ví.`,
+    'system'
+  );
+  await createSystemNotification(
+    txn.seller_id,
+    'Đơn hàng bị hủy do khiếu nại',
+    `Đơn hàng #${txn.id.slice(0, 8)} bị hủy sau khi admin giải quyết khiếu nại. Sách của bạn đã được mở bán lại hoặc trả lại.`,
+    'system'
+  );
+
+  return true;
+}
+
+export async function resolveDisputeReleaseSeller(disputeId) {
+  // 1. Lấy thông tin khiếu nại và giao dịch liên quan
+  const { data: dispute, error: disputeErr } = await supabase
+    .from('lb_disputes')
+    .select('*, transaction:transaction_id(*)')
+    .eq('id', disputeId)
+    .single();
+  if (disputeErr) throw disputeErr;
+  if (!dispute) throw new Error('Không tìm thấy khiếu nại');
+  if (dispute.status === 'resolved') throw new Error('Khiếu nại đã được giải quyết trước đó');
+
+  const txn = dispute.transaction;
+  if (!txn) throw new Error('Không tìm thấy giao dịch liên quan');
+
+  // 2. Nếu thanh toán bằng Ví hoặc PayOS thì giải ngân cho người bán
+  if (txn.status === 'pending' && (txn.payment_method === 'wallet' || txn.payment_method === 'payos')) {
+    const netAmount = Number(txn.net_amount) || 0;
+    const { data: sellerWallet, error: walletErr } = await supabase
+      .from('lb_wallets')
+      .select('*')
+      .eq('user_id', txn.seller_id)
+      .maybeSingle();
+    if (walletErr) throw walletErr;
+
+    if (sellerWallet) {
+      const { error: creditErr } = await supabase
+        .from('lb_wallets')
+        .update({
+          balance: (sellerWallet.balance || 0) + netAmount,
+          total_in: (sellerWallet.total_in || 0) + netAmount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', txn.seller_id);
+      if (creditErr) throw creditErr;
+    } else {
+      const { error: insertErr } = await supabase
+        .from('lb_wallets')
+        .insert([{
+          user_id: txn.seller_id,
+          balance: netAmount,
+          total_in: netAmount,
+          total_out: 0,
+          updated_at: new Date().toISOString()
+        }]);
+      if (insertErr) throw insertErr;
+    }
+  }
+
+  // 3. Cập nhật trạng thái giao dịch sang 'completed'
+  const newNotes = (txn.notes ? txn.notes + '|' : '') + `released_by_admin:true|resolved_dispute:${disputeId}`;
+  const { error: updateTxnErr } = await supabase
+    .from('lb_transactions')
+    .update({
+      status: 'completed',
+      is_completed: true,
+      notes: newNotes,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', txn.id);
+  if (updateTxnErr) throw updateTxnErr;
+
+  // 4. Đánh dấu sách đã bán
+  if (txn.book_id) {
+    await supabase
+      .from('lb_books')
+      .update({
+        status: 'sold',
+        is_sold: true,
+        sold_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', txn.book_id);
+  }
+
+  // 5. Cập nhật trạng thái khiếu nại thành 'resolved' bằng hàm có sẵn
+  await updateDisputeStatus(disputeId, 'resolved', 'Giải ngân cho người bán (Admin xử lý)');
+
+  // 6. Gửi thông báo hệ thống
+  await createSystemNotification(
+    txn.buyer_id,
+    'Đơn hàng hoàn tất',
+    `Khiếu nại đơn hàng #${txn.id.slice(0, 8)} đã được giải quyết. Giao dịch được xác nhận hoàn tất.`,
+    'system'
+  );
+  await createSystemNotification(
+    txn.seller_id,
+    'Giải ngân thành công',
+    `Khiếu nại đơn hàng #${txn.id.slice(0, 8)} đã được giải quyết. Số tiền giải ngân ${txn.net_amount}đ đã được cộng vào ví của bạn.`,
+    'system'
+  );
+
+  return true;
+}
+
 export default {
   getUsers, getUserById, updateUserStatus, updateUserRole, updateUserProfile, createUser,
   getListings, getListingById, updateListingStatus, deleteListing,
   getTransactions, updateTransactionStatus,
   getCategories, getCategoryById, createCategory, updateCategory, deleteCategory,
   getDisputes, updateDisputeStatus,
+  resolveDisputeRefundBuyer, resolveDisputeReleaseSeller,
   getReports, updateReportStatus,
   getAnalytics, getDashboardStats, getRealAdminAnalytics,
   getSetting, getAllSettings, updateSetting,

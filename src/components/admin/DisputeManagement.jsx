@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import { getDisputes, updateDisputeStatus, reopenDispute, getDisputeMessages, sendAdminMessage } from "../../services/admin";
-import { releaseEscrow, cancelTransaction } from "../../services/payment";
+import { getDisputes, updateDisputeStatus, reopenDispute, getDisputeMessages, sendAdminMessage, resolveDisputeRefundBuyer, resolveDisputeReleaseSeller } from "../../services/admin";
 
 function ChatModal({ dispute, onClose }) {
   const { userData } = useAuth();
@@ -166,19 +165,13 @@ export default function DisputeManagement() {
         patchDispute(id, { status: 'open' });
 
       } else if (resolution === 'refund_buyer') {
-        // BUG FIX: Hoàn tiền cho người mua — hủy giao dịch + hoàn esc row
-        if (dispute.transaction_id) {
-          await cancelTransaction(dispute.transaction_id, dispute.buyer_id);
-        }
-        await updateDisputeStatus(id, 'resolved', 'Hoàn tiền cho người mua');
+        // Gọi hàm admin hoàn tiền cho người mua
+        await resolveDisputeRefundBuyer(id);
         patchDispute(id, { status: 'resolved' });
 
       } else if (resolution === 'release_seller') {
-        // BUG FIX: Giải ngân cho người bán — giải ngân escrow vào ví người bán
-        if (dispute.transaction_id) {
-          await releaseEscrow(dispute.transaction_id);
-        }
-        await updateDisputeStatus(id, 'resolved', 'Giải ngân cho người bán');
+        // Gọi hàm admin giải ngân cho người bán
+        await resolveDisputeReleaseSeller(id);
         patchDispute(id, { status: 'resolved' });
       }
     } catch (err) {
