@@ -51,12 +51,6 @@ const PAYMENT_METHODS = [
     description: "Thanh toán khi gặp mặt hoặc nhận hàng",
     icon: "💵",
   },
-  {
-    id: "bank_transfer",
-    label: "Chuyển khoản ngân hàng",
-    description: "Chuyển khoản trước khi giao dịch",
-    icon: "🏦",
-  },
 ];
 
 export default function CheckoutScreen() {

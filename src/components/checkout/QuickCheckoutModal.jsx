@@ -16,7 +16,6 @@ const PAYMENT_METHODS = [
   { id: "wallet", label: "Ví LoopBook", description: "Thanh toán bằng số dư trong ví" },
   { id: "payos", label: "Cổng thanh toán PayOS (VietQR)", description: "Quét mã QR bằng ứng dụng ngân hàng" },
   { id: "cash", label: "Tiền mặt (COD)", description: "Thanh toán khi gặp mặt hoặc nhận hàng" },
-  { id: "bank_transfer", label: "Chuyển khoản ngân hàng", description: "Chuyển khoản trước khi giao dịch" },
 ];
 
 export default function QuickCheckoutModal({ book, onClose }) {

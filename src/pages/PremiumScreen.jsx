@@ -13,8 +13,7 @@ export default function PremiumScreen() {
   const [paymentMethod, setPaymentMethod] = useState("wallet");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [bankTransferInfo, setBankTransferInfo] = useState(null);
-  const [showBankInfo, setShowBankInfo] = useState(false);
+
   const [showCardForm, setShowCardForm] = useState(false);
   const [cardInfo, setCardInfo] = useState({ number: "", name: "", exp: "", cvv: "" });
 
@@ -49,18 +48,6 @@ export default function PremiumScreen() {
     if (!user) { showToast("Vui lòng đăng nhập", "error"); return; }
     if (!userData?.id) { showToast("Không tìm thấy thông tin người dùng", "error"); return; }
     if (!selected) { showToast("Vui lòng chọn gói dịch vụ", "error"); return; }
-
-    if (paymentMethod === "bank") {
-      setBankTransferInfo({
-        bank: "Vietcombank - CN Hồ Chí Minh",
-        accountNumber: "1234 5678 9012",
-        accountHolder: "LOOPBOOK COMPANY",
-        amount: selected.price,
-        content: `TTDV ${selected.id} ${user.id}`,
-      });
-      setShowBankInfo(true);
-      return;
-    }
 
     if (paymentMethod === "card") {
       setShowCardForm(true);
@@ -138,7 +125,6 @@ export default function PremiumScreen() {
 
   const paymentMethods = [
     { id: "wallet", label: "Ví LoopBook", icon: "💳" },
-    { id: "bank", label: "Chuyển khoản ngân hàng", icon: "🏦" },
     { id: "card", label: "Thẻ tín dụng", icon: "💰" },
   ];
 
@@ -267,29 +253,6 @@ export default function PremiumScreen() {
               </details>
             </div>
           </div>
-
-          {/* Bank Transfer Info Modal */}
-          {showBankInfo && bankTransferInfo && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowBankInfo(false)}>
-              <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-slate-900">Thông tin chuyển khoản</h3>
-                  <button onClick={() => setShowBankInfo(false)} className="text-slate-400 hover:text-slate-600">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-4 space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-500">Ngân hàng</span><span className="font-semibold">{bankTransferInfo.bank}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Số tài khoản</span><span className="font-semibold">{bankTransferInfo.accountNumber}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Chủ tài khoản</span><span className="font-semibold">{bankTransferInfo.accountHolder}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Số tiền</span><span className="font-bold text-teal-700">{formatPrice(bankTransferInfo.amount)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Nội dung CK</span><span className="font-semibold text-teal-600">{bankTransferInfo.content}</span></div>
-                </div>
-                <p className="text-xs text-slate-500 mt-4">Sau khi chuyển khoản, vui lòng chờ 5-15 phút để hệ thống xác nhận. Gói dịch vụ sẽ được kích hoạt tự động.</p>
-                <button onClick={() => setShowBankInfo(false)} className="w-full mt-4 py-3 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold transition-colors">Đã hiểu</button>
-              </div>
-            </div>
-          )}
 
           {/* Card Payment Modal */}
           {showCardForm && (

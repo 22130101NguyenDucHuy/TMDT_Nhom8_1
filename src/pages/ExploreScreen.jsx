@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import BookCard from "../components/common/BookCard";
-import { getBookImageUrl, resolveBookImages } from "../utils/imageResolver";
+import { resolveBookImages } from "../utils/imageResolver";
 
 const PAGE_SIZE = 12;
 
@@ -51,10 +51,9 @@ export default function ExploreScreen() {
   const [books, setBooks]             = useState([]);
   const [categories, setCategories]   = useState([]);
   const [categoryCounts, setCategoryCounts] = useState({});
-  const [loading, setLoading]         = useState(true);      // lần đầu
-  const [loadingMore, setLoadingMore] = useState(false);     // load thêm
-  const [hasMore, setHasMore]         = useState(true);
-  const [page, setPage]               = useState(0);
+  const [loading, setLoading]         = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount]   = useState(0);
 
   // Khởi tạo từ URL params (q=... và danh-muc=...)
   const [searchQuery, setSearchQuery]           = useState(() => searchParams.get("q") || "");
@@ -64,11 +63,12 @@ export default function ExploreScreen() {
   const [sortBy, setSortBy]                     = useState("newest");
   const [schoolQuery, setSchoolQuery]           = useState("");
 
-  // Ref cho sentinel element (Intersection Observer)
-  const sentinelRef = useRef(null);
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // ── Build Supabase query theo filter/sort hiện tại ─────────────────────
-  const buildQuery = useCallback((from, to) => {
+  // ── Build Supabase query (có range theo trang) ─────────────────────────
+  const buildQuery = useCallback((page) => {
+    const from = (page - 1) * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
     let q = supabase
       .from("lb_books")
       .select(`
@@ -95,67 +95,125 @@ export default function ExploreScreen() {
     return q;
   }, [searchQuery, selectedCategory, selectedSchool, selectedPrice, sortBy]);
 
-  // ── Fetch lần đầu (hoặc khi filter thay đổi) ──────────────────────────
-  useEffect(() => {
-    const fetchInitial = async () => {
-      setLoading(true);
-      setBooks([]);
-      setPage(0);
-      setHasMore(true);
+  // ── Build count query (giống filter, không range) ──────────────────────
+  const buildCountQuery = useCallback(() => {
+    let q = supabase
+      .from("lb_books")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active");
 
-      const [booksResult, catsResult, countResult] = await Promise.all([
-        buildQuery(0, PAGE_SIZE - 1),
-        supabase.from("lb_categories").select("*").order("order", { ascending: true }),
-        supabase.from("lb_books").select("category").eq("status", "active"),
-      ]);
+    if (searchQuery.trim())     q = q.ilike("title", `%${searchQuery.trim()}%`);
+    if (selectedCategory !== "all") q = q.eq("category", selectedCategory);
+    if (selectedSchool !== "all")   q = q.eq("school", selectedSchool);
 
-      if (booksResult.data) {
-        setBooks(booksResult.data.map(normalizeBook));
-        setHasMore(booksResult.data.length === PAGE_SIZE);
-      }
-      if (catsResult.data) setCategories(catsResult.data);
-      if (countResult.data) {
-        const counts = {};
-        for (const b of countResult.data) {
-          if (b.category) counts[b.category] = (counts[b.category] || 0) + 1;
-        }
-        setCategoryCounts(counts);
-      }
-      setLoading(false);
-    };
-    fetchInitial();
-  }, [buildQuery]);
+    const { min, max } = PRICE_PRESETS[selectedPrice];
+    if (min > 0)          q = q.gte("price", min);
+    if (max !== Infinity) q = q.lte("price", max);
 
-  // ── Load thêm trang tiếp theo ──────────────────────────────────────────
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    const from = nextPage * PAGE_SIZE;
-    const to   = from + PAGE_SIZE - 1;
+    return q;
+  }, [searchQuery, selectedCategory, selectedSchool, selectedPrice]);
 
-    const { data } = await buildQuery(from, to);
-    if (data) {
-      setBooks((prev) => [...prev, ...data.map(normalizeBook)]);
-      setPage(nextPage);
-      setHasMore(data.length === PAGE_SIZE);
+  // ── Fetch dữ liệu theo trang ───────────────────────────────────────────
+  const fetchPage = useCallback(async (page) => {
+    setLoading(true);
+    const [booksResult, catsResult, countResult, catCountResult] = await Promise.all([
+      buildQuery(page),
+      supabase.from("lb_categories").select("*").order("order", { ascending: true }),
+      buildCountQuery(),
+      supabase.from("lb_books").select("category").eq("status", "active"),
+    ]);
+
+    if (booksResult.data) {
+      setBooks(booksResult.data.map(normalizeBook));
     }
-    setLoadingMore(false);
-  }, [buildQuery, loadingMore, hasMore, page]);
+    if (catsResult.data) setCategories(catsResult.data);
+    if (countResult.count !== null) setTotalCount(countResult.count);
+    if (catCountResult.data) {
+      const counts = {};
+      for (const b of catCountResult.data) {
+        if (b.category) counts[b.category] = (counts[b.category] || 0) + 1;
+      }
+      setCategoryCounts(counts);
+    }
+    setLoading(false);
+  }, [buildQuery, buildCountQuery]);
 
-  // ── Intersection Observer: tự load khi scroll đến sentinel ────────────
+  // ── Reset về trang 1 khi filter thay đổi ──────────────────────────────
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) loadMore();
-      },
-      { rootMargin: "200px" } // bắt đầu load trước 200px
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedSchool, selectedPrice, sortBy]);
+
+  // ── Fetch khi filter hoặc trang thay đổi ──────────────────────────────
+  useEffect(() => {
+    fetchPage(currentPage);
+  }, [fetchPage, currentPage]);
+
+  const goToPage = (page) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ── Render page numbers ────────────────────────────────────────────────
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    return (
+      <div className="flex items-center justify-center gap-2 mt-10 pb-6">
+        <button
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage <= 1}
+          className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          ← Trước
+        </button>
+        {start > 1 && (
+          <>
+            <button onClick={() => goToPage(1)} className="w-10 h-10 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">1</button>
+            {start > 2 && <span className="text-slate-400 px-1">...</span>}
+          </>
+        )}
+        {pages.map((p) => (
+          <button
+            key={p}
+            onClick={() => goToPage(p)}
+            className={`w-10 h-10 text-sm font-medium rounded-lg border transition-colors ${
+              p === currentPage
+                ? "bg-teal-700 text-white border-teal-700"
+                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+        {end < totalPages && (
+          <>
+            {end < totalPages - 1 && <span className="text-slate-400 px-1">...</span>}
+            <button onClick={() => goToPage(totalPages)} className="w-10 h-10 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">{totalPages}</button>
+          </>
+        )}
+        <button
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage >= totalPages}
+          className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Sau →
+        </button>
+      </div>
     );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [loadMore]);
+  };
 
   // ── Danh sách trường (từ sách đã load) ───────────────────────────────
   const allSchools = useMemo(() => {
@@ -323,9 +381,12 @@ export default function ExploreScreen() {
         {/* Header + sort */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-6">
           <h1 className="text-lg font-bold text-slate-900">
-            {loading ? "Đang tải…" : `${books.length}${hasMore ? "+" : ""} tài liệu`}
+            {loading ? "Đang tải…" : `${totalCount} tài liệu`}
             {selectedCategory !== "all" && (
               <span className="font-normal text-slate-500 text-base"> · {categoryMeta[selectedCategory]?.label}</span>
+            )}
+            {totalPages > 1 && !loading && (
+              <span className="font-normal text-slate-400 text-sm ml-2">(trang {currentPage}/{totalPages})</span>
             )}
           </h1>
           <div className="flex items-center gap-3">
@@ -357,19 +418,9 @@ export default function ExploreScreen() {
               {books.map((book) => (
                 <BookCard key={book.id} book={book} />
               ))}
-
-              {/* Skeleton cards khi đang load thêm */}
-              {loadingMore && Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={`more-${i}`} />
-              ))}
             </div>
 
-            {/* Sentinel — Intersection Observer bắt element này */}
-            <div ref={sentinelRef} className="h-10 mt-6 flex items-center justify-center">
-              {!hasMore && books.length > 0 && (
-                <p className="text-xs text-slate-400 font-medium">Đã hiển thị tất cả tài liệu</p>
-              )}
-            </div>
+            {renderPagination()}
           </>
         )}
       </main>
