@@ -22,8 +22,13 @@ export function AuthProvider({ children }) {
   };
 
   const [userData, setUserData] = useState(null);
+  const userDataRef = useRef(null);
   const [oauthProviders, setOauthProviders] = useState(null);
   const oauthInProgress = useRef(false);
+
+  useEffect(() => {
+    userDataRef.current = userData;
+  }, [userData]);
 
   // Lấy danh sách OAuth provider đã bật — gọi trực tiếp REST API
   // (supabase.auth.getSettings không có sẵn trong phiên bản này)
@@ -129,11 +134,17 @@ export function AuthProvider({ children }) {
     };
 
     // Lắng nghe thay đổi trạng thái auth — callback sync, async xử lý qua .then()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
+        const existingUserData = userDataRef.current;
+        const isSameLoadedUser = existingUserData?.id === session.user.id;
+        if (event === "TOKEN_REFRESHED" || (event === "SIGNED_IN" && isSameLoadedUser)) {
+          return;
+        }
+
         // OAuth edu check
         const isOAuthInProgress = oauthInProgress.current || localStorage.getItem('oauth_in_progress') === 'true';
         if (isOAuthInProgress) {
