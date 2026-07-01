@@ -135,8 +135,10 @@ export function AuthProvider({ children }) {
 
       if (session?.user) {
         // OAuth edu check
-        if (oauthInProgress.current) {
+        const isOAuthInProgress = oauthInProgress.current || localStorage.getItem('oauth_in_progress') === 'true';
+        if (isOAuthInProgress) {
           oauthInProgress.current = false;
+          localStorage.removeItem('oauth_in_progress');
           const email = session.user.email || '';
           if (!EDU_EMAIL_REGEX.test(email)) {
             supabase.auth.signOut().then(() => {
@@ -175,12 +177,14 @@ export function AuthProvider({ children }) {
       return;
     }
     oauthInProgress.current = true;
+    localStorage.setItem('oauth_in_progress', 'true');
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: window.location.origin },
     });
     if (error) {
       oauthInProgress.current = false;
+      localStorage.removeItem('oauth_in_progress');
       showToast(error.message, 'error');
     }
   };
