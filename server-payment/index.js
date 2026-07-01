@@ -248,7 +248,7 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
       returnUrl,
     };
 
-    const paymentLink = await payos.createPaymentLink(paymentData);
+    const paymentLink = await payos.paymentRequests.create(paymentData);
     res.json({ checkoutUrl: paymentLink.checkoutUrl, orderCode, txnId });
   } catch (err) {
     console.error('[PayOS] Lỗi tạo payment link:', err.message);
@@ -259,7 +259,7 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
 app.get('/api/payment/check-payment/:orderCode', async (req, res) => {
   const { orderCode } = req.params;
   try {
-    const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
+    const paymentInfo = await payos.paymentRequests.getPaymentLinkInformation(orderCode);
     if (paymentInfo.status === 'PAID') {
       const result = await fulfillPayment(orderCode);
       return res.json({ status: 'PAID', result });
