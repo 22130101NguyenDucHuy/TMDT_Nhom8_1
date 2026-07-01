@@ -10,9 +10,17 @@ function lazyWithRetry(componentImport) {
     try {
       return await componentImport();
     } catch (error) {
-      console.warn("Failed to load page chunk, forcing reload to fetch latest version:", error);
-      window.location.reload();
-      return new Promise(() => {}); // prevent loading broken state before reload
+      const retryKey = `loopbook_lazy_retry:${window.location.pathname}`;
+      const hasRetried = sessionStorage.getItem(retryKey) === "true";
+
+      if (!hasRetried) {
+        sessionStorage.setItem(retryKey, "true");
+        window.location.reload();
+        return new Promise(() => {}); // prevent loading broken state before reload
+      }
+
+      sessionStorage.removeItem(retryKey);
+      throw error;
     }
   });
 }

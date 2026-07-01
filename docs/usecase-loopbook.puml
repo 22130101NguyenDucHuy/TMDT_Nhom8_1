@@ -1,0 +1,185 @@
+@startuml
+title Use Case Diagram - LoopBook
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor "Khách vãng lai" as Guest
+actor "Người dùng" as User
+actor "Người mua" as Buyer
+actor "Người bán" as Seller
+actor "Quản trị viên" as Admin
+actor "Điều phối viên" as Moderator
+actor "Cổng thanh toán PayOS" as PayOS
+actor "Supabase Auth" as SupabaseAuth
+
+User <|-- Buyer
+User <|-- Seller
+Admin <|-- Moderator
+
+rectangle "Hệ thống LoopBook" {
+  package "Tài khoản & xác thực" {
+    usecase "Xem trang chủ" as UC_ViewHome
+    usecase "Khám phá / tìm kiếm tài liệu" as UC_SearchBooks
+    usecase "Lọc, sắp xếp tài liệu" as UC_FilterBooks
+    usecase "Xem chi tiết tài liệu" as UC_ViewBook
+    usecase "Đăng ký tài khoản" as UC_Register
+    usecase "Đăng nhập" as UC_Login
+    usecase "Đăng nhập Google / Microsoft" as UC_OAuth
+    usecase "Quên / đặt lại mật khẩu" as UC_ResetPassword
+    usecase "Quản lý hồ sơ cá nhân" as UC_Profile
+    usecase "Quản lý yêu thích" as UC_Favorites
+  }
+
+  package "Xác thực sinh viên" {
+    usecase "Gửi ảnh thẻ sinh viên" as UC_SubmitStudentCard
+    usecase "Chờ admin xét duyệt" as UC_WaitVerification
+    usecase "Gia hạn xác thực sinh viên" as UC_RenewVerification
+  }
+
+  package "Tin đăng tài liệu" {
+    usecase "Đăng bán tài liệu" as UC_CreateListing
+    usecase "Tra ISBN từ Google Books" as UC_ISBN
+    usecase "Tải ảnh tài liệu" as UC_UploadBookImages
+    usecase "Lưu nháp tin đăng" as UC_SaveDraft
+    usecase "Quản lý bài đăng của tôi" as UC_ManageListings
+    usecase "Sửa tin đăng" as UC_EditListing
+    usecase "Theo dõi trạng thái duyệt" as UC_TrackApproval
+    usecase "Mua gói đẩy tin" as UC_BoostListing
+  }
+
+  package "Mua bán & giao dịch" {
+    usecase "Liên hệ người bán" as UC_ContactSeller
+    usecase "Nhắn tin trao đổi" as UC_Message
+    usecase "Đề xuất / chấp nhận giá" as UC_Offer
+    usecase "Đặt mua tài liệu" as UC_Checkout
+    usecase "Chọn hình thức giao nhận" as UC_Delivery
+    usecase "Thanh toán bằng ví" as UC_WalletPayment
+    usecase "Thanh toán PayOS / VietQR" as UC_PayOSPayment
+    usecase "Thanh toán COD / chuyển khoản ngoài" as UC_OfflinePayment
+    usecase "Khóa tiền ký quỹ" as UC_LockEscrow
+    usecase "Xác nhận đã nhận sách" as UC_ConfirmReceived
+    usecase "Giải ngân cho người bán" as UC_ReleaseEscrow
+    usecase "Hủy giao dịch" as UC_CancelTransaction
+    usecase "Gửi khiếu nại giao dịch" as UC_Dispute
+    usecase "Đánh giá người bán" as UC_RateSeller
+    usecase "Xem lịch sử giao dịch" as UC_TransactionHistory
+  }
+
+  package "Ví tiền" {
+    usecase "Xem số dư ví" as UC_ViewWallet
+    usecase "Nạp ví qua PayOS" as UC_DepositPayOS
+    usecase "Gửi yêu cầu rút tiền" as UC_WithdrawRequest
+    usecase "Xem lịch sử ví" as UC_WalletHistory
+  }
+
+  package "Yêu cầu tìm sách" {
+    usecase "Tạo yêu cầu tìm sách" as UC_CreateBookRequest
+    usecase "Xem yêu cầu của tôi" as UC_MyBookRequests
+    usecase "Chào hàng cho yêu cầu" as UC_OfferForRequest
+  }
+
+  package "Quản trị" {
+    usecase "Xem dashboard quản trị" as UC_AdminDashboard
+    usecase "Quản lý người dùng" as UC_AdminUsers
+    usecase "Duyệt xác thực sinh viên" as UC_AdminVerifications
+    usecase "Duyệt / gỡ / khôi phục tin đăng" as UC_AdminListings
+    usecase "Quản lý danh mục" as UC_AdminCategories
+    usecase "Theo dõi giao dịch" as UC_AdminTransactions
+    usecase "Duyệt yêu cầu rút tiền" as UC_AdminWithdrawals
+    usecase "Quản lý gói premium / đẩy tin" as UC_AdminPremium
+    usecase "Xử lý tranh chấp" as UC_AdminDisputes
+    usecase "Xử lý báo cáo vi phạm" as UC_AdminReports
+    usecase "Cấu hình hệ thống" as UC_AdminSettings
+  }
+}
+
+Guest --> UC_ViewHome
+Guest --> UC_SearchBooks
+Guest --> UC_FilterBooks
+Guest --> UC_ViewBook
+Guest --> UC_Register
+Guest --> UC_Login
+Guest --> UC_ResetPassword
+
+User --> UC_ViewHome
+User --> UC_SearchBooks
+User --> UC_FilterBooks
+User --> UC_ViewBook
+User --> UC_Profile
+User --> UC_Favorites
+User --> UC_Message
+User --> UC_TransactionHistory
+User --> UC_ViewWallet
+User --> UC_WalletHistory
+User --> UC_CreateBookRequest
+User --> UC_MyBookRequests
+
+Seller --> UC_SubmitStudentCard
+Seller --> UC_WaitVerification
+Seller --> UC_RenewVerification
+Seller --> UC_CreateListing
+Seller --> UC_SaveDraft
+Seller --> UC_ManageListings
+Seller --> UC_EditListing
+Seller --> UC_TrackApproval
+Seller --> UC_OfferForRequest
+Seller --> UC_BoostListing
+Seller --> UC_ContactSeller
+Seller --> UC_Offer
+
+Buyer --> UC_ContactSeller
+Buyer --> UC_Checkout
+Buyer --> UC_CancelTransaction
+Buyer --> UC_ConfirmReceived
+Buyer --> UC_Dispute
+Buyer --> UC_RateSeller
+Buyer --> UC_DepositPayOS
+Buyer --> UC_WithdrawRequest
+
+Admin --> UC_AdminDashboard
+Admin --> UC_AdminUsers
+Admin --> UC_AdminVerifications
+Admin --> UC_AdminListings
+Admin --> UC_AdminCategories
+Admin --> UC_AdminTransactions
+Admin --> UC_AdminWithdrawals
+Admin --> UC_AdminPremium
+Admin --> UC_AdminDisputes
+Admin --> UC_AdminReports
+Admin --> UC_AdminSettings
+
+Moderator --> UC_AdminDashboard
+Moderator --> UC_AdminVerifications
+Moderator --> UC_AdminListings
+Moderator --> UC_AdminTransactions
+Moderator --> UC_AdminDisputes
+Moderator --> UC_AdminReports
+
+SupabaseAuth --> UC_Register
+SupabaseAuth --> UC_Login
+SupabaseAuth --> UC_OAuth
+SupabaseAuth --> UC_ResetPassword
+PayOS --> UC_PayOSPayment
+PayOS --> UC_DepositPayOS
+
+UC_Register .> UC_SubmitStudentCard : <<include>>
+UC_Login .> UC_OAuth : <<extend>>
+UC_CreateListing .> UC_SubmitStudentCard : <<include>>
+UC_CreateListing .> UC_UploadBookImages : <<include>>
+UC_CreateListing .> UC_ISBN : <<extend>>
+UC_Checkout .> UC_Delivery : <<include>>
+UC_Checkout .> UC_WalletPayment : <<extend>>
+UC_Checkout .> UC_PayOSPayment : <<extend>>
+UC_Checkout .> UC_OfflinePayment : <<extend>>
+UC_WalletPayment .> UC_LockEscrow : <<include>>
+UC_PayOSPayment .> UC_LockEscrow : <<include>>
+UC_ConfirmReceived .> UC_ReleaseEscrow : <<include>>
+UC_Dispute .> UC_AdminDisputes : <<extend>>
+UC_WithdrawRequest .> UC_AdminWithdrawals : <<include>>
+UC_AdminVerifications .> UC_WaitVerification : <<include>>
+UC_AdminListings .> UC_TrackApproval : <<include>>
+UC_OfferForRequest .> UC_CreateListing : <<include>>
+
+@enduml
