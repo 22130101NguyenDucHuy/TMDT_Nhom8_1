@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
 import { formatPrice } from "../utils/formatters";
 import { releaseEscrow, submitSellerRating } from "../services/payment";
+import VerificationGate from "../components/sell/VerificationGate";
 
 /** Tạo conversation_id nhất quán giữa 2 user cho 1 cuốn sách */
 function buildConvId(uid1, uid2, bookId) {
@@ -542,7 +543,6 @@ export default function MessagesScreen() {
   }
 
 
-
   if (userData && userData.status === 'suspended') {
     return (
       <div className="max-w-4xl mx-auto py-16 text-center">
@@ -565,7 +565,8 @@ export default function MessagesScreen() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto flex h-[calc(100vh-160px)] min-h-[600px] border border-slate-200 bg-white shadow-sm mt-6">
+    <VerificationGate>
+      <div className="max-w-6xl mx-auto flex h-[calc(100vh-160px)] min-h-[600px] border border-slate-200 bg-white shadow-sm mt-6">
 
       {/* ── Sidebar: danh sách conversations ── */}
       <div className="w-1/3 flex flex-col border-r border-slate-200">
@@ -1074,5 +1075,6 @@ export default function MessagesScreen() {
       )}
 
     </div>
+    </VerificationGate>
   );
 }

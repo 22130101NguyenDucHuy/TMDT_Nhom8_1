@@ -4,6 +4,7 @@ import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
 import { releaseEscrow, openDispute, cancelTransaction, submitSellerRating } from "../services/payment";
+import VerificationGate from "../components/sell/VerificationGate";
 
 const statusConfig = {
   pending: { label: "Chờ xử lý", color: "bg-yellow-100 text-yellow-700" },
@@ -20,6 +21,21 @@ export default function MyTransactionsScreen() {
 
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filteredTransactions, setFilteredTransactions] = useState([]);
+
+  useEffect(() => {
+    let filtered = transactions || [];
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'disputed') {
+        filtered = filtered.filter(t => t.notes?.includes('disputed:true'));
+      } else {
+        filtered = filtered.filter(t => t.status === filterStatus && !t.notes?.includes('disputed:true'));
+      }
+    }
+    setFilteredTransactions(filtered);
+  }, [transactions, filterStatus]);
+
   const [processingId, setProcessingId] = useState(null);
   const [disputeTxnId, setDisputeTxnId] = useState(null);
   const [disputeReason, setDisputeReason] = useState("");
@@ -99,7 +115,7 @@ export default function MyTransactionsScreen() {
     if (!ratingTxn) return;
     setRatingSubmitting(true);
     try {
-      await submitSellerRating(ratingTxn.id, ratingTxn.seller_id, ratingValue);
+      await submitSellerRating(ratingTxn.id, ratingTxn.seller_id, ratingValue, userData.id);
       showToast("Cảm ơn bạn đã đánh giá người bán!", "success");
       setShowRatingModal(false);
       setRatingTxn(null);
@@ -164,11 +180,43 @@ export default function MyTransactionsScreen() {
     );
   }
 
+  if (userData.status === 'suspended') {
+    return (
+      <div className="max-w-4xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-6 text-red-500 shadow-sm">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">Tài khoản đã bị khóa</h2>
+        <p className="text-slate-600 mb-6 max-w-md mx-auto">Tài khoản của bạn đã bị khóa do vi phạm chính sách của LoopBook.</p>
+        <Link to="/" className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto py-6">
-      <div className="mb-6">
-        <p className="text-sm font-semibold text-teal-700 uppercase tracking-wider mb-1">Quản lý</p>
-        <h1 className="text-2xl font-bold text-slate-900">Giao dịch của tôi</h1>
+    <VerificationGate>
+      <div className="max-w-4xl mx-auto py-6">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-teal-700 uppercase tracking-wider mb-1">Quản lý</p>
+          <h1 className="text-2xl font-bold text-slate-900">Giao dịch của tôi</h1>
+        </div>
+        <div className="flex gap-2">
+          <select 
+            value={filterStatus} 
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 font-medium shadow-sm"
+          >
+            <option value="all">Tất cả trạng thái</option>
+            <option value="pending">Chờ xử lý</option>
+            <option value="confirmed">Đã xác nhận</option>
+            <option value="awaiting_meet">Chờ gặp mặt</option>
+            <option value="completed">Hoàn tất</option>
+            <option value="cancelled">Đã hủy</option>
+            <option value="refunded">Đã hoàn tiền</option>
+            <option value="disputed">Đang tranh chấp</option>
+          </select>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -176,12 +224,12 @@ export default function MyTransactionsScreen() {
           <div className="flex items-center justify-center py-16">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-700" />
           </div>
-        ) : transactions.length === 0 ? (
+        ) : filteredTransactions.length === 0 ? (
           <div className="py-16 text-center">
             <svg className="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <p className="text-slate-500 font-medium">Chưa có giao dịch nào</p>
+            <p className="text-slate-500 font-medium">Không tìm thấy giao dịch nào</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -197,8 +245,10 @@ export default function MyTransactionsScreen() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {transactions.map((txn) => {
-                  const status = statusConfig[txn.status] || { label: txn.status, color: "bg-slate-100 text-slate-600" };
+                {filteredTransactions.map((txn) => {
+                  const isDisputed = txn.notes?.includes('disputed:true');
+                  const displayStatus = isDisputed ? 'disputed' : txn.status;
+                  const status = statusConfig[displayStatus] || { label: displayStatus, color: "bg-slate-100 text-slate-600" };
                   const isBuyer = txn.buyer_id === userData.id;
                   const isPendingWallet = txn.status === 'pending' && (txn.payment_method === 'wallet' || txn.payment_method === 'payos') && !txn.is_completed;
                   const showConfirmBtn = isBuyer && isPendingWallet;
@@ -421,5 +471,6 @@ export default function MyTransactionsScreen() {
         </div>
       )}
     </div>
+    </VerificationGate>
   );
 }

@@ -4,6 +4,7 @@ import { supabase } from "../services/supabase";
 import { formatPrice } from "../utils/formatters";
 import { useAuth } from "../contexts/AuthContext";
 import Page from "../components/layout/Page";
+import VerificationGate from "../components/sell/VerificationGate";
 
 export default function PremiumScreen() {
   const { user, userData, showToast } = useAuth();
@@ -16,17 +17,31 @@ export default function PremiumScreen() {
 
   const [showCardForm, setShowCardForm] = useState(false);
   const [cardInfo, setCardInfo] = useState({ number: "", name: "", exp: "", cvv: "" });
+  const [promoActive, setPromoActive] = useState(false);
 
   useEffect(() => {
-    const fetchPlans = async () => {
-      const { data } = await supabase.from("lb_premium_plans").select("*");
-      if (data && data.length > 0) {
-        setPlans(data);
-        setSelectedPlan(data[0].id);
+    const fetchPlansAndPromo = async () => {
+      try {
+        const { data: plansData } = await supabase.from("lb_premium_plans").select("*");
+        if (plansData && plansData.length > 0) {
+          setPlans(plansData);
+          setSelectedPlan(plansData[0].id);
+        }
+        const { data: settingData } = await supabase
+          .from("lb_settings")
+          .select("value")
+          .eq("key", "promo_campaign_active")
+          .maybeSingle();
+        if (settingData) {
+          setPromoActive(settingData.value === 'true');
+        }
+      } catch (err) {
+        console.warn("fetchPlansAndPromo warning:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
-    fetchPlans();
+    fetchPlansAndPromo();
   }, []);
 
   const selected = plans.find((plan) => plan.id === selectedPlan) ?? plans[0];
@@ -40,6 +55,19 @@ export default function PremiumScreen() {
         <h2 className="text-2xl font-bold text-slate-800 mb-4">Bạn chưa đăng nhập</h2>
         <p className="text-slate-600 mb-6">Vui lòng đăng nhập để sử dụng dịch vụ Premium.</p>
         <button onClick={() => navigate("/")} className="vinted-btn-primary w-auto px-8 mx-auto">Về trang chủ</button>
+      </div>
+    );
+  }
+
+  if (userData && userData.status === 'suspended') {
+    return (
+      <div className="max-w-4xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-6 text-red-500 shadow-sm">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">Tài khoản đã bị khóa</h2>
+        <p className="text-slate-600 mb-6 max-w-md mx-auto">Tài khoản của bạn đã bị khóa do vi phạm chính sách của LoopBook.</p>
+        <button onClick={() => navigate("/")} className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</button>
       </div>
     );
   }
@@ -139,11 +167,29 @@ export default function PremiumScreen() {
   }
 
   return (
-    <Page
-      description="Dịch vụ Premium - Nâng cấp để có thêm nhiều tính năng."
-      eyebrow="Premium"
-      heading="Thanh toán dịch vụ đẩy tin"
-    >
+    <VerificationGate>
+      <Page
+        description="Dịch vụ Premium - Nâng cấp để có thêm nhiều tính năng."
+        eyebrow="Premium"
+        heading="Thanh toán dịch vụ đẩy tin"
+      >
+      <div className="max-w-6xl mx-auto mt-4 px-4">
+        {promoActive && (
+          <div className="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 text-white rounded-2xl p-5 shadow-md relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4 animate-pulse">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
+            <div className="relative z-10 flex items-center gap-3">
+              <span className="text-3xl animate-bounce">🔥</span>
+              <div>
+                <h4 className="font-extrabold text-lg tracking-wide uppercase">SIÊU ƯU ĐÃI ĐANG DIỄN RA!</h4>
+                <p className="text-sm font-medium text-red-50 opacity-95 mt-0.5">Mua gói Combo Đẩy tin, nhận ngay thêm 2 lượt đẩy tin MIỄN PHÍ vào tài khoản!</p>
+              </div>
+            </div>
+            <div className="relative z-10 bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl border border-white/30 text-xs font-bold uppercase tracking-wider shadow-inner">
+              Khuyến mãi +2 lượt
+            </div>
+          </div>
+        )}
+      </div>
       <div className="py-6 flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto">
         <aside className="w-full lg:w-72 flex-shrink-0">
           <div className="sticky top-24 space-y-6">
@@ -282,5 +328,6 @@ export default function PremiumScreen() {
         </main>
       </div>
     </Page>
+    </VerificationGate>
   );
 }

@@ -4,6 +4,7 @@ import { useCategories } from "../hooks/useCategories";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
 import { formatPriceInput } from "../utils/formatters";
+import VerificationGate from "../components/sell/VerificationGate";
 
 const conditionOptions = [
   { id: "brand_new", label: "Mới 100%" },
@@ -204,6 +205,19 @@ export default function EditListingScreen() {
     );
   }
 
+  if (userData && userData.status === 'suspended') {
+    return (
+      <div className="max-w-4xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-6 text-red-500 shadow-sm">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">Tài khoản đã bị khóa</h2>
+        <p className="text-slate-600 mb-6 max-w-md mx-auto">Tài khoản của bạn đã bị khóa do vi phạm chính sách của LoopBook.</p>
+        <button onClick={() => navigate("/")} className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</button>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -213,7 +227,8 @@ export default function EditListingScreen() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8">
+    <VerificationGate>
+      <div className="max-w-4xl mx-auto py-8">
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => navigate("/quan-ly")} className="text-slate-400 hover:text-slate-600">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
@@ -347,6 +362,14 @@ export default function EditListingScreen() {
             <input type="text" value={price} onChange={e => setPrice(formatPriceInput(e.target.value))}
               className="vinted-input pr-10 text-lg font-bold text-teal-800 border-teal-200" placeholder="0" />
           </div>
+          {category && (
+            <p className="text-xs text-teal-700 font-medium mt-2 flex items-center gap-1.5 animate-in fade-in duration-200">
+              <svg className="w-4 h-4 text-teal-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              💡 Gợi ý: Các tài liệu cùng danh mục này thường được chốt đơn nhanh nhất trong khoảng 30.000đ - 50.000đ.
+            </p>
+          )}
         </div>
         <div className="mb-4">
           <label className="font-bold text-slate-900 block mb-2">Mô tả</label>
@@ -407,5 +430,6 @@ export default function EditListingScreen() {
         </button>
       </div>
     </div>
+    </VerificationGate>
   );
 }

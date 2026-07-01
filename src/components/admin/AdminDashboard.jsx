@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
-import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats } from "../../services/admin";
+import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats, createSystemNotification, setPromoCampaign, getPromoCampaign, updateUserStatus } from "../../services/admin";
 import { RevenueChart, CategoryDistributionChart, UserGrowthChart } from "./AdminCharts";
+import { supabase } from "../../services/supabase";
 
 const CATEGORY_LABELS = {
   "cong-nghe-thong-tin": "CNTT",
@@ -122,6 +123,8 @@ export default function AdminDashboard() {
     return labels[s] || s;
   };
 
+
+
   if (loading) {
     return (
       <div className="admin-page">
@@ -133,6 +136,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-page">
+      {toastMsg && (
+        <div className="fixed top-6 right-6 z-[100] bg-teal-800 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 border border-teal-600 animate-in fade-in slide-in-from-top-5 duration-300">
+          <svg className="w-5 h-5 text-teal-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="font-semibold text-sm">{toastMsg}</span>
+        </div>
+      )}
+
       <div className="admin-header">
         <h1>Dashboard</h1>
       </div>
@@ -156,6 +168,8 @@ export default function AdminDashboard() {
           <p className="admin-stat-value">{formatCurrencyShort(totalRevenue)}</p>
         </div>
       </div>
+
+
 
       {/* Date filter */}
       <div style={{ marginTop: "32px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", background: "#fff", padding: "16px 20px", borderRadius: "12px", border: "1px solid #e9edf4" }}>

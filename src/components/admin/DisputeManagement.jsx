@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { getDisputes, updateDisputeStatus, reopenDispute, getDisputeMessages, sendAdminMessage } from "../../services/admin";
+import { releaseEscrow, cancelTransaction } from "../../services/payment";
 
 function ChatModal({ dispute, onClose }) {
   const { userData } = useAuth();
@@ -155,18 +156,34 @@ export default function DisputeManagement() {
     setDisputes(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
   };
 
-  const handleStatusUpdate = async (id, newStatus) => {
+  const handleStatusUpdate = async (dispute, resolution) => {
+    const id = dispute.id;
     setActionLoading(id);
     try {
-      if (newStatus === 'open') {
+      if (resolution === 'open') {
+        // Mở lại tranh chấp
         await reopenDispute(id);
-      } else {
-        await updateDisputeStatus(id, newStatus);
+        patchDispute(id, { status: 'open' });
+
+      } else if (resolution === 'refund_buyer') {
+        // BUG FIX: Hoàn tiền cho người mua — hủy giao dịch + hoàn esc row
+        if (dispute.transaction_id) {
+          await cancelTransaction(dispute.transaction_id, dispute.buyer_id);
+        }
+        await updateDisputeStatus(id, 'resolved', 'Hoàn tiền cho người mua');
+        patchDispute(id, { status: 'resolved' });
+
+      } else if (resolution === 'release_seller') {
+        // BUG FIX: Giải ngân cho người bán — giải ngân escrow vào ví người bán
+        if (dispute.transaction_id) {
+          await releaseEscrow(dispute.transaction_id);
+        }
+        await updateDisputeStatus(id, 'resolved', 'Giải ngân cho người bán');
+        patchDispute(id, { status: 'resolved' });
       }
-      patchDispute(id, { status: newStatus });
     } catch (err) {
-      console.error("Failed to update dispute:", err);
-      setError("Không thể cập nhật tranh chấp");
+      console.error('Failed to update dispute:', err);
+      setError('Lỗi: ' + (err.message || 'Không thể cập nhật tranh chấp'));
     } finally {
       setActionLoading(null);
     }
@@ -264,7 +281,7 @@ export default function DisputeManagement() {
                 </td>
                 <td>{dispute.dispute_date}</td>
                 <td>
-                  <div className="admin-actions" style={{ flexWrap: "wrap" }}>
+                  <div className="admin-actions" style={{ flexWrap: "wrap", gap: "6px" }}>
                     <button
                       onClick={() => setChatDispute(dispute)}
                       className="admin-btn admin-btn-secondary"
@@ -272,18 +289,32 @@ export default function DisputeManagement() {
                       Chat
                     </button>
                     {dispute.status !== "resolved" ? (
-                      <button
-                        className="admin-btn admin-btn-primary"
-                        disabled={actionLoading === dispute.id}
-                        onClick={() => handleStatusUpdate(dispute.id, "resolved")}
-                      >
-                        {actionLoading === dispute.id ? "..." : "Giải Quyết"}
-                      </button>
+                      <>
+                        {/* BUG FIX: Hai nút rõ ràng — admin chọn hướng giải quyết */}
+                        <button
+                          className="admin-btn"
+                          disabled={actionLoading === dispute.id}
+                          onClick={() => handleStatusUpdate(dispute, 'refund_buyer')}
+                          style={{ background: '#3b82f6', borderColor: '#3b82f6', color: '#fff', padding: '5px 9px', fontSize: '12px' }}
+                          title="Hoàn tiền escrow về ví người mua"
+                        >
+                          {actionLoading === dispute.id ? '...' : '💰 Hoàn tiền NM'}
+                        </button>
+                        <button
+                          className="admin-btn"
+                          disabled={actionLoading === dispute.id}
+                          onClick={() => handleStatusUpdate(dispute, 'release_seller')}
+                          style={{ background: '#10b981', borderColor: '#10b981', color: '#fff', padding: '5px 9px', fontSize: '12px' }}
+                          title="Giải ngân escrow cho người bán"
+                        >
+                          {actionLoading === dispute.id ? '...' : '✅ Giải ngân NB'}
+                        </button>
+                      </>
                     ) : (
                       <button
                         className="admin-btn admin-btn-primary"
                         disabled={actionLoading === dispute.id}
-                        onClick={() => handleStatusUpdate(dispute.id, "open")}
+                        onClick={() => handleStatusUpdate(dispute, 'open')}
                         style={{ background: "#f59e0b", borderColor: "#f59e0b" }}
                       >
                         {actionLoading === dispute.id ? "..." : "Mở Lại"}

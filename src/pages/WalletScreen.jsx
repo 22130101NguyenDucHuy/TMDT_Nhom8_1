@@ -4,6 +4,7 @@ import { supabase } from "../services/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
 import { depositWallet, withdrawWallet, createPayOSDepositLink, checkPayOSPaymentStatus } from "../services/payment";
+import VerificationGate from "../components/sell/VerificationGate";
 
 export default function WalletScreen() {
   const { userData, showToast } = useAuth();
@@ -48,7 +49,17 @@ export default function WalletScreen() {
           .select("*, book:book_id(title)")
           .or(`buyer_id.eq.${userData.id},seller_id.eq.${userData.id}`)
           .order("created_at", { ascending: false });
-        setTransactions(txnData || []);
+
+        const { data: wdData } = await supabase
+          .from("lb_withdrawals")
+          .select("*")
+          .eq("user_id", userData.id)
+          .order("created_at", { ascending: false });
+
+        const merged = [...(txnData || []), ...(wdData || [])].sort((a, b) => {
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+        setTransactions(merged);
       } catch (err) {
         console.error("wallet fetch error:", err.message);
       } finally {
@@ -106,6 +117,7 @@ export default function WalletScreen() {
         }
       } catch (err) {
         showToast(err.message || "Nạp tiền thất bại", "error");
+      } finally {
         setShowPaymentGateway(false);
         setSubmitting(false);
       }
@@ -174,6 +186,19 @@ export default function WalletScreen() {
     );
   }
 
+  if (userData.status === 'suspended') {
+    return (
+      <div className="max-w-4xl mx-auto py-16 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-6 text-red-500 shadow-sm">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">Tài khoản đã bị khóa</h2>
+        <p className="text-slate-600 mb-6 max-w-md mx-auto">Tài khoản của bạn đã bị khóa do vi phạm chính sách của LoopBook.</p>
+        <Link to="/" className="vinted-btn-outline w-auto px-8 mx-auto">Về trang chủ</Link>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -185,7 +210,8 @@ export default function WalletScreen() {
   const balance = wallet?.balance || 0;
 
   return (
-    <div className="max-w-4xl mx-auto py-6 flex flex-col gap-6">
+    <VerificationGate>
+      <div className="max-w-4xl mx-auto py-6 flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-teal-700 uppercase tracking-wider mb-1">Tài chính</p>
@@ -242,37 +268,54 @@ export default function WalletScreen() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {transactions.slice(0, 10).map((txn) => {
-              const isBuyer = txn.buyer_id === userData.id;
-              const isIn = !isBuyer && txn.status === "completed";
-              const isOut = isBuyer && txn.status === "completed";
+            {transactions.slice(0, 10).map((item) => {
+              const isWithdrawal = !!item.bank_name;
+              let title, color, amountPrefix, amountColor;
+
+              if (isWithdrawal) {
+                title = `Rút tiền về ${item.bank_name}`;
+                color = item.status === 'completed' ? 'bg-green-100 text-green-600' : (item.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600');
+                amountPrefix = "-";
+                amountColor = "text-slate-900";
+              } else {
+                const isBuyer = item.buyer_id === userData.id;
+                title = isBuyer ? `Mua: ${item.book?.title || "Sách"}` : `Bán: ${item.book?.title || "Sách"}`;
+                color = isBuyer ? "bg-slate-100 text-slate-600" : "bg-teal-50 text-teal-600";
+                amountPrefix = isBuyer ? "-" : "+";
+                amountColor = isBuyer ? "text-slate-900" : "text-teal-600";
+              }
+
               return (
-                <div key={txn.id} className="flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    isIn ? "bg-green-100" : isOut ? "bg-red-100" : "bg-slate-100"
-                  }`}>
-                    {isIn ? (
-                      <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19V5M5 12l7 7 7-7" /></svg>
-                    ) : isOut ? (
-                      <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v14M5 12l7-7 7 7" /></svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    )}
+                <div key={item.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-teal-100 hover:shadow-md transition-all duration-200">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${color}`}>
+                      {isWithdrawal ? (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          {amountPrefix === "-" 
+                            ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />}
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 text-sm">{title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-slate-500">{new Date(item.created_at).toLocaleDateString("vi-VN")}</span>
+                        {isWithdrawal && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${item.status === 'completed' ? 'bg-green-100 text-green-700' : (item.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700')}`}>
+                            {item.status === 'completed' ? 'Thành công' : (item.status === 'rejected' ? 'Từ chối' : 'Đang xử lý')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900 text-sm">
-                      {isBuyer ? "Mua: " : "Bán: "}
-                      {txn.book?.title || "—"}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {new Date(txn.created_at).toLocaleDateString("vi-VN")}
+                  <div className="text-right">
+                    <p className={`font-bold ${amountColor}`}>
+                      {amountPrefix}{formatPrice(item.amount)}
                     </p>
                   </div>
-                  <span className={`font-bold text-sm ${
-                    isIn ? "text-green-600" : isOut ? "text-red-500" : "text-slate-400"
-                  }`}>
-                    {isIn ? "+" : isOut ? "-" : ""}{formatPrice(txn.amount)}
-                  </span>
                 </div>
               );
             })}
@@ -396,5 +439,6 @@ export default function WalletScreen() {
         </div>
       )}
     </div>
+    </VerificationGate>
   );
 }

@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../utils/formatters";
 import { createTransaction, processWalletPayment, createPayOSCheckoutLink } from "../services/payment";
 import { getMeetupSpots, getDefaultMeetupSpots } from "../utils/campusMeetup";
+import VerificationGate from "../components/sell/VerificationGate";
 
 // ─── Cấu hình phương thức vận chuyển ───────────────────────────────────────
 const DELIVERY_METHODS = [
@@ -237,7 +238,8 @@ export default function CheckoutScreen() {
   const imgSrc = book.images?.[0] || book.image || null;
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
+    <VerificationGate>
+      <div className="max-w-2xl mx-auto py-8 px-4">
       {/* Header */}
       <div className="mb-6">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-teal-700 transition-colors mb-3">
@@ -490,5 +492,6 @@ export default function CheckoutScreen() {
         <span className="underline cursor-pointer">Chính sách hoàn tiền</span> của LoopBook
       </p>
     </div>
+    </VerificationGate>
   );
 }

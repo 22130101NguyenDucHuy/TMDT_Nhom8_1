@@ -108,8 +108,48 @@ export default function SellScreen() {
    const [loading, setLoading] = useState(false);
    const [uploadStep, setUploadStep] = useState("");
    const [errors, setErrors] = useState({});
+   const [priceTip, setPriceTip] = useState(null); // Lưu thông tin gợi ý giá động
 
    const fileInputRef = useRef(null);
+
+   // BUG FIX: Lấy gợi ý giá động theo danh mục từ Supabase thay vì hardcode
+   useEffect(() => {
+      if (!category) {
+         setPriceTip(null);
+         return;
+      }
+      const fetchPriceTip = async () => {
+         try {
+            const { data, error } = await supabase
+               .from('lb_books')
+               .select('price')
+               .eq('category', category)
+               .gt('price', 0);
+            
+            if (error) throw error;
+            if (data && data.length > 0) {
+               const prices = data.map(d => d.price).sort((a, b) => a - b);
+               // Lấy khoảng giá trung bình từ 25th percentile đến 75th percentile để bỏ giá dị biệt
+               const q1 = prices[Math.floor((prices.length - 1) * 0.25)];
+               const q3 = prices[Math.floor((prices.length - 1) * 0.75)];
+               // Nếu số lượng quá ít (chỉ có 1-2 sách), lấy min/max
+               const minPrice = prices.length < 3 ? prices[0] : q1;
+               const maxPrice = prices.length < 3 ? prices[prices.length - 1] : q3;
+
+               if (minPrice === maxPrice) {
+                  setPriceTip(`Khoảng ${minPrice.toLocaleString("vi-VN")}đ`);
+               } else {
+                  setPriceTip(`Khoảng ${minPrice.toLocaleString("vi-VN")}đ - ${maxPrice.toLocaleString("vi-VN")}đ`);
+               }
+            } else {
+               setPriceTip("Chưa có dữ liệu giá cho danh mục này");
+            }
+         } catch (err) {
+            console.error('Lỗi khi tải gợi ý giá:', err);
+         }
+      };
+      fetchPriceTip();
+   }, [category]);
 
     if (!userData) {
       return (
@@ -555,7 +595,15 @@ export default function SellScreen() {
                      placeholder="0"
                   />
                </div>
-               {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price}</p>}
+                {category && priceTip && (
+                   <p className="text-xs text-teal-700 font-medium mt-2 flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-teal-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      💡 Gợi ý: Các tài liệu cùng danh mục này thường được bán trong {priceTip}.
+                   </p>
+                )}
+                {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price}</p>}
             </div>
 
             <div className="mb-6">
