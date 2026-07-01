@@ -1,9 +1,11 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../services/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function AuthModal() {
   const { isAuthModalOpen, authModalMode, setAuthModalMode, closeAuthModal, showToast, signInWithOAuth, isEduEmail } = useAuth();
+  const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,11 +41,27 @@ export default function AuthModal() {
 
     try {
       if (authModalMode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: authData, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+
+        // Kiểm tra vai trò để điều hướng ngay lập tức
+        if (authData?.user) {
+          const { data: userRec } = await supabase
+            .from('lb_users')
+            .select('role')
+            .eq('id', authData.user.id)
+            .maybeSingle();
+          
+          if (userRec && ["admin", "moderator"].includes(userRec.role)) {
+            showToast("Đăng nhập Admin thành công!", "success");
+            closeAuthModal();
+            navigate("/admin");
+            return;
+          }
+        }
 
         showToast("Đăng nhập thành công!", "success");
         closeAuthModal();

@@ -51,9 +51,11 @@ export default function AppShell() {
 
   useEffect(() => {
     if (!loading && userData && ["admin", "moderator"].includes(userData.role)) {
-      navigate("/admin", { replace: true });
+      if (location.pathname === "/") {
+        navigate("/admin", { replace: true });
+      }
     }
-  }, [userData, loading, navigate]);
+  }, [userData, loading, navigate, location.pathname]);
 
   useEffect(() => {
     const titles = {
