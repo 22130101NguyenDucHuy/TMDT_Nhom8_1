@@ -78,7 +78,15 @@ export default function TransactionManagement() {
 
   useEffect(() => {
     loadTransactions();
-  }, [filterStatus, searchTerm]);
+  }, [filterStatus]);
+
+  useEffect(() => {
+    const delay = setTimeout(() => {
+      loadTransactions(true);
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [searchTerm]);
+
   useEffect(() => { loadTransactions(); }, [page]);
 
   const patchTx = (id, updates) => {
@@ -131,14 +139,7 @@ export default function TransactionManagement() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="admin-page">
-        <div className="admin-header"><h1>Quản Lý Giao Dịch</h1></div>
-        <div style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>Đang tải dữ liệu...</div>
-      </div>
-    );
-  }
+  // Bỏ chặn render toàn trang khi loading để ô input không bị unmount liên tục
 
   if (error) {
     return (
@@ -206,33 +207,44 @@ export default function TransactionManagement() {
             </tr>
           </thead>
           <tbody>
-            {txList.map((tx) => (
-              <tr key={tx.id}>
-                <td><strong>{tx.book || "—"}</strong></td>
-                <td>{tx.buyer_name || "—"}</td>
-                <td>{tx.seller_name || "—"}</td>
-                <td style={{ fontWeight: 600 }}>{tx.amount ? `${(Number(tx.amount) / 1000).toFixed(0)}K` : "—"}</td>
-                <td>
-                  <span className={`admin-badge ${statusColor(tx.status)}`}>
-                    {STATUS_MAP[tx.status] || tx.status}
-                  </span>
-                </td>
-                <td>{tx.created_at ? new Date(tx.created_at).toLocaleDateString("vi-VN") : "—"}</td>
-                <td>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <button onClick={() => setSelectedTx(tx)} className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Chi Tiết</button>
-                    {(tx.status === "pending" || tx.status === "awaiting_meet") && (
-                      <button onClick={() => handleConfirm(tx)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === tx.id}>
-                        {actionLoading === tx.id ? "..." : "Xác Nhận"}
-                      </button>
-                    )}
-                    <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Liên Hệ</button>
-                  </div>
+            {loading ? (
+              <tr>
+                <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
+                  Đang tải dữ liệu...
                 </td>
               </tr>
-            ))}
-            {txList.length === 0 && (
-              <tr><td colSpan="6" style={{ textAlign: "center", padding: "32px", color: "#56647e" }}>Chưa có giao dịch nào</td></tr>
+            ) : txList.length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
+                  Không tìm thấy giao dịch nào
+                </td>
+              </tr>
+            ) : (
+              txList.map((tx) => (
+                <tr key={tx.id}>
+                  <td><strong>{tx.book || "—"}</strong></td>
+                  <td>{tx.buyer_name || "—"}</td>
+                  <td>{tx.seller_name || "—"}</td>
+                  <td style={{ fontWeight: 600 }}>{tx.amount ? `${(Number(tx.amount) / 1000).toFixed(0)}K` : "—"}</td>
+                  <td>
+                    <span className={`admin-badge ${statusColor(tx.status)}`}>
+                      {STATUS_MAP[tx.status] || tx.status}
+                    </span>
+                  </td>
+                  <td>{tx.created_at ? new Date(tx.created_at).toLocaleDateString("vi-VN") : "—"}</td>
+                  <td>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button onClick={() => setSelectedTx(tx)} className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Chi Tiết</button>
+                      {(tx.status === "pending" || tx.status === "awaiting_meet") && (
+                        <button onClick={() => handleConfirm(tx)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === tx.id}>
+                          {actionLoading === tx.id ? "..." : "Xác Nhận"}
+                        </button>
+                      )}
+                      <button className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Liên Hệ</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>

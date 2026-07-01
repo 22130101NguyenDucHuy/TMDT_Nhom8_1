@@ -336,11 +336,12 @@ export async function openDispute(transactionId, userId, reason = '') {
   if (insertErr) throw insertErr;
 
   // Chuyển trạng thái giao dịch
+  const newNotes = (txn.notes ? txn.notes + '|' : '') + 'disputed:true';
   const { error: updateErr } = await supabase
     .from('lb_transactions')
     .update({
-      status: 'disputed',
-      notes: (txn.notes || '') + `|dispute:${reason}|dispute_at:${nowISO}`,
+      notes: newNotes,
+      updated_at: nowISO,
     })
     .eq('id', transactionId);
   if (updateErr) throw updateErr;
@@ -355,7 +356,7 @@ export function getPaymentMethods() {
   ];
 }
 
-const PAYMENT_URL = import.meta.env.VITE_PAYMENT_URL || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' ? window.location.origin : 'http://localhost:3002');
+const PAYMENT_URL = import.meta.env.VITE_PAYMENT_URL || '';
 
 export async function createPayOSDepositLink(userId, amount) {
   try {

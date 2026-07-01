@@ -558,7 +558,7 @@ export async function updateFeeConfig(id, updates) {
 // ============================================================================
 
 export async function getNotifications(userId, filters = {}, page = 1, perPage = 20) {
-  let query = supabase.from('lb_notifications').select('id, type, title, body, is_read, created_at', { count: 'exact' }).eq('user_id', userId);
+  let query = supabase.from('lb_notifications').select('id, type, title, content, is_read, created_at', { count: 'exact' }).eq('user_id', userId);
   if (filters.is_read !== undefined) query = query.eq('is_read', filters.is_read);
   if (filters.type) query = query.eq('type', filters.type);
   const from = (page - 1) * perPage;
@@ -688,7 +688,7 @@ export async function getWithdrawals(filters = {}, page = 1, perPage = 20) {
 export async function approveWithdrawal(id) {
   const { error } = await supabase
     .from('lb_withdrawals')
-    .update({ status: 'approved', updated_at: new Date().toISOString() })
+    .update({ status: 'approved' })
     .eq('id', id);
   if (error) throw error;
   return true;
@@ -697,7 +697,7 @@ export async function approveWithdrawal(id) {
 export async function rejectWithdrawal(id, userId, amount) {
   const { error: wErr } = await supabase
     .from('lb_withdrawals')
-    .update({ status: 'rejected', updated_at: new Date().toISOString() })
+    .update({ status: 'rejected' })
     .eq('id', id);
   if (wErr) throw wErr;
 
@@ -726,7 +726,7 @@ export async function rejectWithdrawal(id, userId, amount) {
   return true;
 }
 
-export async function createSystemNotification(userId, title, body, type = 'system') {
+export async function createSystemNotification(userId, title, content, type = 'system') {
   try {
     const { data, error } = await supabase
       .from('lb_notifications')
@@ -734,7 +734,7 @@ export async function createSystemNotification(userId, title, body, type = 'syst
         user_id: userId,
         type,
         title,
-        body,
+        content,
         is_read: false,
         created_at: new Date().toISOString()
       }])

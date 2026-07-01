@@ -37,7 +37,7 @@ export default function TopNav() {
     try {
       const { data, error } = await supabase
         .from('lb_notifications')
-        .select('id, type, title, body, is_read, created_at')
+        .select('id, type, title, content, is_read, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -190,7 +190,7 @@ export default function TopNav() {
                                   <p className={`text-xs text-slate-800 font-semibold ${!notif.is_read ? 'text-slate-950 font-bold' : ''}`}>{notif.title}</p>
                                   {!notif.is_read && <span className="w-1.5 h-1.5 bg-teal-600 rounded-full flex-shrink-0 mt-1"></span>}
                                 </div>
-                                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{notif.body}</p>
+                                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{notif.content}</p>
                                 <p className="text-[9px] text-slate-400 mt-1">{new Date(notif.created_at).toLocaleString("vi-VN")}</p>
                               </div>
                             ))

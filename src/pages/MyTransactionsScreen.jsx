@@ -22,11 +22,19 @@ export default function MyTransactionsScreen() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filteredTransactions, setFilteredTransactions] = useState([]);
 
-  const filteredTransactions = transactions.filter((txn) => {
-    if (filterStatus === "all") return true;
-    return txn.status === filterStatus;
-  });
+  useEffect(() => {
+    let filtered = transactions || [];
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'disputed') {
+        filtered = filtered.filter(t => t.notes?.includes('disputed:true'));
+      } else {
+        filtered = filtered.filter(t => t.status === filterStatus && !t.notes?.includes('disputed:true'));
+      }
+    }
+    setFilteredTransactions(filtered);
+  }, [transactions, filterStatus]);
 
   const [processingId, setProcessingId] = useState(null);
   const [disputeTxnId, setDisputeTxnId] = useState(null);
@@ -238,7 +246,9 @@ export default function MyTransactionsScreen() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredTransactions.map((txn) => {
-                  const status = statusConfig[txn.status] || { label: txn.status, color: "bg-slate-100 text-slate-600" };
+                  const isDisputed = txn.notes?.includes('disputed:true');
+                  const displayStatus = isDisputed ? 'disputed' : txn.status;
+                  const status = statusConfig[displayStatus] || { label: displayStatus, color: "bg-slate-100 text-slate-600" };
                   const isBuyer = txn.buyer_id === userData.id;
                   const isPendingWallet = txn.status === 'pending' && (txn.payment_method === 'wallet' || txn.payment_method === 'payos') && !txn.is_completed;
                   const showConfirmBtn = isBuyer && isPendingWallet;
