@@ -329,6 +329,7 @@ export async function openDispute(transactionId, userId, reason = '') {
       description: reason,
       amount_involved: txn.amount,
       status: 'open',
+      dispute_date: nowISO.slice(0, 10),
       created_at: nowISO,
       updated_at: nowISO,
     }]);
