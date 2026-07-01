@@ -10,11 +10,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const payos = new PayOS({
-  clientId: process.env.PAYOS_CLIENT_ID,
-  apiKey: process.env.PAYOS_API_KEY,
-  checksumKey: process.env.PAYOS_CHECKSUM_KEY,
-});
+let payos = null;
+try {
+  if (process.env.PAYOS_CLIENT_ID && process.env.PAYOS_API_KEY && process.env.PAYOS_CHECKSUM_KEY) {
+    payos = new PayOS({
+      clientId: process.env.PAYOS_CLIENT_ID,
+      apiKey: process.env.PAYOS_API_KEY,
+      checksumKey: process.env.PAYOS_CHECKSUM_KEY,
+    });
+  } else {
+    console.warn('[PayOS] Cảnh báo: Thiếu thông tin cấu hình PayOS trong biến môi trường.');
+  }
+} catch (err) {
+  console.error('[PayOS] Lỗi khởi tạo PayOS SDK:', err.message);
+}
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://ehvgtgzleukxtqgstivd.supabase.co';
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -132,6 +141,9 @@ async function fulfillPayment(orderCode) {
 }
 
 app.post('/api/payment/create-payment-link', async (req, res) => {
+  if (!payos) {
+    return res.status(500).json({ error: 'Cổng thanh toán PayOS chưa được cấu hình. Vui lòng thiết lập biến môi trường PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.' });
+  }
   const { amount, userId, type, bookId, buyerName, buyerPhone, deliveryAddress, deliveryMethod, deliveryFee } = req.body;
 
   if (!amount || amount <= 0 || !userId) {
@@ -257,6 +269,9 @@ app.post('/api/payment/create-payment-link', async (req, res) => {
 });
 
 app.get('/api/payment/check-payment/:orderCode', async (req, res) => {
+  if (!payos) {
+    return res.status(500).json({ error: 'Cổng thanh toán PayOS chưa được cấu hình.' });
+  }
   const { orderCode } = req.params;
   try {
     const paymentInfo = await (payos.getPaymentLinkInformation ? payos.getPaymentLinkInformation(orderCode) : payos.paymentRequests.getPaymentLinkInformation(orderCode));
@@ -273,6 +288,9 @@ app.get('/api/payment/check-payment/:orderCode', async (req, res) => {
 });
 
 app.post('/api/payment/payos-webhook', async (req, res) => {
+  if (!payos) {
+    return res.status(500).send('PayOS not configured');
+  }
   try {
     const webhookData = payos.webhooks ? payos.webhooks.verify(req.body) : payos.verifyPaymentWebhookData(req.body);
 
