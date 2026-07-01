@@ -355,7 +355,7 @@ export function getPaymentMethods() {
   ];
 }
 
-const PAYMENT_URL = import.meta.env.VITE_PAYMENT_URL || 'http://localhost:3002';
+const PAYMENT_URL = import.meta.env.VITE_PAYMENT_URL || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' ? window.location.origin : 'http://localhost:3002');
 
 export async function createPayOSDepositLink(userId, amount) {
   try {

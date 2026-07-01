@@ -291,6 +291,10 @@ app.post('/api/payment/payos-webhook', async (req, res) => {
 });
 
 const PORT = process.env.PAYMENT_PORT || 3002;
-app.listen(PORT, () => {
-  console.log(`PAYMENT SERVER RUNNING ON PORT ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`PAYMENT SERVER RUNNING ON PORT ${PORT}`);
+  });
+}
+
+module.exports = app;
