@@ -552,7 +552,7 @@ export async function markNotificationRead(notificationId) {
 }
 
 export async function getVerifications(filters = {}, page = 1, perPage = 20) {
-  let query = supabase.from('lb_student_verifications').select('id, user_id, status, created_at', { count: 'exact' });
+  let query = supabase.from('lb_student_verifications').select('id, user_id, image_path, status, created_at', { count: 'exact' });
   if (filters.status) query = query.eq('status', filters.status);
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
