@@ -3,23 +3,36 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import TopNav from "./TopNav";
 import AuthModal from "../auth/AuthModal";
 
+// Helper tự động tải lại trang khi gặp lỗi load chunk (do thay đổi mã hash khi deploy bản build mới trên Vercel)
+function lazyWithRetry(componentImport) {
+  return lazy(async () => {
+    try {
+      return await componentImport();
+    } catch (error) {
+      console.warn("Failed to load page chunk, forcing reload to fetch latest version:", error);
+      window.location.reload();
+      return new Promise(() => {}); // prevent loading broken state before reload
+    }
+  });
+}
+
 // ── Lazy load tất cả pages — mỗi route chỉ tải JS khi cần ─────────────────
-const HomeScreen             = lazy(() => import("../../pages/HomeScreen"));
-const ExploreScreen          = lazy(() => import("../../pages/ExploreScreen"));
-const BookDetailScreen       = lazy(() => import("../../pages/BookDetailScreen"));
-const SellScreen             = lazy(() => import("../../pages/SellScreen"));
-const EditListingScreen      = lazy(() => import("../../pages/EditListingScreen"));
-const MessagesScreen         = lazy(() => import("../../pages/MessagesScreen"));
-const WalletScreen           = lazy(() => import("../../pages/WalletScreen"));
-const CheckoutScreen         = lazy(() => import("../../pages/CheckoutScreen"));
-const TransactionSuccessScreen = lazy(() => import("../../pages/TransactionSuccessScreen"));
-const MyTransactionsScreen   = lazy(() => import("../../pages/MyTransactionsScreen"));
-const PremiumScreen          = lazy(() => import("../../pages/PremiumScreen"));
-const DashboardScreen        = lazy(() => import("../../pages/DashboardScreen"));
-const ProfileScreen          = lazy(() => import("../../pages/ProfileScreen"));
-const FavoritesScreen        = lazy(() => import("../../pages/FavoritesScreen"));
-const BookRequestScreen      = lazy(() => import("../../pages/BookRequestScreen"));
-const MyBookRequestsScreen   = lazy(() => import("../../pages/MyBookRequestsScreen"));
+const HomeScreen             = lazyWithRetry(() => import("../../pages/HomeScreen"));
+const ExploreScreen          = lazyWithRetry(() => import("../../pages/ExploreScreen"));
+const BookDetailScreen       = lazyWithRetry(() => import("../../pages/BookDetailScreen"));
+const SellScreen             = lazyWithRetry(() => import("../../pages/SellScreen"));
+const EditListingScreen      = lazyWithRetry(() => import("../../pages/EditListingScreen"));
+const MessagesScreen         = lazyWithRetry(() => import("../../pages/MessagesScreen"));
+const WalletScreen           = lazyWithRetry(() => import("../../pages/WalletScreen"));
+const CheckoutScreen         = lazyWithRetry(() => import("../../pages/CheckoutScreen"));
+const TransactionSuccessScreen = lazyWithRetry(() => import("../../pages/TransactionSuccessScreen"));
+const MyTransactionsScreen   = lazyWithRetry(() => import("../../pages/MyTransactionsScreen"));
+const PremiumScreen          = lazyWithRetry(() => import("../../pages/PremiumScreen"));
+const DashboardScreen        = lazyWithRetry(() => import("../../pages/DashboardScreen"));
+const ProfileScreen          = lazyWithRetry(() => import("../../pages/ProfileScreen"));
+const FavoritesScreen        = lazyWithRetry(() => import("../../pages/FavoritesScreen"));
+const BookRequestScreen      = lazyWithRetry(() => import("../../pages/BookRequestScreen"));
+const MyBookRequestsScreen   = lazyWithRetry(() => import("../../pages/MyBookRequestsScreen"));
 
 // ── Fallback spinner dùng chung ────────────────────────────────────────────
 function PageLoader() {
