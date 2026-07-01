@@ -105,7 +105,7 @@ export default function ExploreScreen() {
 
       const [booksResult, catsResult, countResult] = await Promise.all([
         buildQuery(0, PAGE_SIZE - 1),
-        supabase.from("lb_categories").select("*").order("order", { ascending: true }),
+        supabase.from("lb_categories").select("*").eq("is_active", true).order("order", { ascending: true }),
         supabase.from("lb_books").select("category").eq("status", "active"),
       ]);
 

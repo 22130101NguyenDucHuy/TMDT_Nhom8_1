@@ -1,7 +1,9 @@
-import { lazy, Suspense, useEffect } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation, Link } from "react-router-dom";
 import TopNav from "./TopNav";
 import AuthModal from "../auth/AuthModal";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../services/supabase";
 
 // ── Lazy load tất cả pages — mỗi route chỉ tải JS khi cần ─────────────────
 const HomeScreen             = lazy(() => import("../../pages/HomeScreen"));
@@ -31,6 +33,49 @@ function PageLoader() {
 
 export default function AppShell() {
   const location = useLocation();
+  const { user } = useAuth();
+  const [notification, setNotification] = useState(null);
+
+  useEffect(() => {
+    if (!user) {
+      setNotification(null);
+      return;
+    }
+
+    const checkVerificationStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("lb_student_verifications")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) return;
+
+        // Bỏ qua nếu vẫn đang chờ duyệt
+        if (data.status === "pending") return;
+
+        const dismissedId = localStorage.getItem(`loopbook_verify_dismiss_${user.id}`);
+        if (dismissedId !== data.id) {
+          setNotification(data);
+        }
+      } catch (err) {
+        console.error("Lỗi kiểm tra trạng thái xác thực trong AppShell:", err);
+      }
+    };
+
+    checkVerificationStatus();
+  }, [user]);
+
+  const handleDismiss = () => {
+    if (notification) {
+      localStorage.setItem(`loopbook_verify_dismiss_${user.id}`, notification.id);
+      setNotification(null);
+    }
+  };
 
   useEffect(() => {
     const titles = {
@@ -57,6 +102,34 @@ export default function AppShell() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <TopNav />
+
+      {notification && (
+        <div className={`w-full py-3 px-4 border-b text-center text-sm font-semibold flex items-center justify-center gap-2 relative transition-all animate-in slide-in-from-top duration-300 ${
+          notification.status === 'approved' 
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
+            : 'bg-rose-50 text-rose-800 border-rose-100'
+        }`}>
+          <span>
+            {notification.status === 'approved' ? (
+              <>🎉 Chúc mừng! Thẻ sinh viên của bạn đã được duyệt thành công. Tài khoản của bạn đã hoạt động đầy đủ tính năng giao dịch!</>
+            ) : (
+              <>⚠️ Yêu cầu xác thực thẻ sinh viên của bạn đã bị từ chối. Vui lòng gửi lại ảnh thẻ khác để tiếp tục sử dụng LoopBook. <Link to="/dang-ban" className="underline font-bold hover:text-rose-950 ml-1">Gửi lại ngay &rarr;</Link></>
+            )}
+          </span>
+          <button 
+            onClick={handleDismiss} 
+            className={`absolute right-4 p-1 rounded-full transition-colors ${
+              notification.status === 'approved' ? 'hover:bg-emerald-100 text-emerald-600' : 'hover:bg-rose-100 text-rose-600'
+            }`}
+            title="Đóng thông báo"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 xl:px-8 py-6">
         <Suspense fallback={<PageLoader />}>
           <Routes>

@@ -61,7 +61,7 @@ export default function HomeScreen() {
   const [categoryCounts, setCategoryCounts] = useState({});
 
   useEffect(() => {
-    supabase.from("lb_categories").select("*").order("order", { ascending: true })
+    supabase.from("lb_categories").select("*").eq("is_active", true).order("order", { ascending: true })
       .then(({ data }) => { if (data) setCategories(data); })
       .catch(() => {});
 

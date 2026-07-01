@@ -13,7 +13,7 @@ export default function TopNav() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.from("lb_categories").select("id, name").order("order", { ascending: true }).then(({ data }) => {
+    supabase.from("lb_categories").select("id, name, is_active").eq("is_active", true).order("order", { ascending: true }).then(({ data }) => {
       if (data) setCategories(data);
     }).catch(() => {});
   }, []);
