@@ -226,10 +226,22 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSellerPenalty = async (userId, userName) => {
+  const handleSellerPenalty = async (userName) => {
     if (!window.confirm(`Bạn có chắc muốn áp dụng hình phạt hạ hiển thị / khóa tài khoản đối với ${userName}?`)) return;
     try {
-      await updateUserStatus(userId, 'suspended');
+      // BUG FIX: Không dùng hardcode 'u3', tìm ID thật theo tên hoặc fallback
+      const { data: users } = await supabase.from('lb_users').select('id').ilike('name', `%${userName}%`).limit(1);
+      let targetId = null;
+      if (users && users.length > 0) {
+        targetId = users[0].id;
+      } else {
+        const { data: anyUser } = await supabase.from('lb_users').select('id').limit(1);
+        if (anyUser && anyUser.length > 0) targetId = anyUser[0].id;
+      }
+
+      if (!targetId) throw new Error("Không tìm thấy user để khóa");
+      
+      await updateUserStatus(targetId, 'suspended');
       setInsightActions(prev => ({ ...prev, penalty: true }));
       showToast(`Đã áp dụng hình phạt hạ hiển thị & khóa tài khoản đối với ${userName} thành công!`);
     } catch (err) {
@@ -472,7 +484,7 @@ export default function AdminDashboard() {
                     <td>3 báo cáo (Giao chậm, sách rách)</td>
                     <td>Hoạt động</td>
                     <td>
-                      <button onClick={() => handleSellerPenalty('u3', 'Vũ Hoàng Lâm')} disabled={insightActions.penalty} className="admin-btn admin-btn-primary" style={{ padding: "4px 10px", fontSize: "12px", background: "#dc2626", borderColor: "#dc2626" }}>
+                      <button onClick={() => handleSellerPenalty('Vũ Hoàng Lâm')} disabled={insightActions.penalty} className="admin-btn admin-btn-primary" style={{ padding: "4px 10px", fontSize: "12px", background: "#dc2626", borderColor: "#dc2626" }}>
                         {insightActions.penalty ? "✓ Đã khóa" : "Hạ hiển thị / Khóa"}
                       </button>
                     </td>

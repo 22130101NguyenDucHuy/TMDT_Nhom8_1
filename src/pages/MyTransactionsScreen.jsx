@@ -107,7 +107,7 @@ export default function MyTransactionsScreen() {
     if (!ratingTxn) return;
     setRatingSubmitting(true);
     try {
-      await submitSellerRating(ratingTxn.id, ratingTxn.seller_id, ratingValue);
+      await submitSellerRating(ratingTxn.id, ratingTxn.seller_id, ratingValue, userData.id);
       showToast("Cảm ơn bạn đã đánh giá người bán!", "success");
       setShowRatingModal(false);
       setRatingTxn(null);

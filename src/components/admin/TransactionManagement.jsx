@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getTransactions, updateTransactionStatus } from "../../services/admin";
+import { releaseEscrow } from "../../services/payment";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Tất Cả Trạng Thái" },
@@ -109,13 +110,24 @@ export default function TransactionManagement() {
     return sum + parseInt(cleaned, 10);
   }, 0);
 
-  const handleConfirm = async (id) => {
+  const handleConfirm = async (tx) => {
+    setActionLoading(tx.id);
     try {
-      await updateTransactionStatus(id, "completed", true);
+      // BUG FIX: Với giao dịch thanh toán qua ví / PayOS, phải gọi releaseEscrow
+      // để giải ngân tiền thực sự vào ví người bán.
+      if (tx.payment_method === 'wallet' || tx.payment_method === 'payos') {
+        await releaseEscrow(tx.id);
+      } else {
+        // Tiền mặt / chuyển khoản: chỉ đánh dấu hoàn tất, không có escrow
+        await updateTransactionStatus(tx.id, 'completed', true);
+      }
       // Reload lại từ DB để đảm bảo dữ liệu đồng bộ
       await loadTransactions();
     } catch (err) {
-      console.error("Xác nhận giao dịch thất bại:", err);
+      console.error('Xác nhận giao dịch thất bại:', err);
+      alert('Lỗi khi xác nhận: ' + (err.message || 'Vui lòng thử lại'));
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -210,7 +222,7 @@ export default function TransactionManagement() {
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button onClick={() => setSelectedTx(tx)} className="admin-btn admin-btn-secondary" style={{ padding: "6px 10px", fontSize: "12px" }}>Chi Tiết</button>
                     {(tx.status === "pending" || tx.status === "awaiting_meet") && (
-                      <button onClick={() => handleConfirm(tx.id)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === tx.id}>
+                      <button onClick={() => handleConfirm(tx)} className="admin-btn admin-btn-primary" style={{ padding: "6px 10px", fontSize: "12px" }} disabled={actionLoading === tx.id}>
                         {actionLoading === tx.id ? "..." : "Xác Nhận"}
                       </button>
                     )}

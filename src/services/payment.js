@@ -294,8 +294,8 @@ export async function openDispute(transactionId, userId, reason = '') {
     throw new Error('Đã quá thời hạn khiếu nại (48h). Vui lòng liên hệ Admin.');
   }
 
-  // Không cho khiếu nại khi đã hủy/hoàn tiền/đang tranh chấp
-  if (['cancelled', 'refunded', 'disputed'].includes(txn.status)) {
+  // Không cho khiếu nại khi đã hủy/hoàn tiền/đang tranh chấp hoặc đã hoàn tất
+  if (['cancelled', 'refunded', 'disputed', 'completed'].includes(txn.status)) {
     throw new Error('Giao dịch này không thể khiếu nại');
   }
 
@@ -513,17 +513,22 @@ export async function cancelTransaction(transactionId, userId) {
   return updatedTxn;
 }
 
-export async function submitSellerRating(transactionId, sellerId, ratingValue) {
+export async function submitSellerRating(transactionId, sellerId, ratingValue, callerId) {
   if (!transactionId || !sellerId || !ratingValue || ratingValue < 1 || ratingValue > 5) {
     throw new Error('Thông tin đánh giá không hợp lệ');
   }
 
   const { data: txn, error: txnError } = await supabase
     .from('lb_transactions')
-    .select('id, notes, status')
+    .select('id, notes, status, buyer_id')
     .eq('id', transactionId)
     .single();
   if (txnError) throw txnError;
+
+  // BUG FIX: Chỉ người mua của giao dịch mới được phép đánh giá người bán
+  if (callerId && txn.buyer_id !== callerId) {
+    throw new Error('Chỉ người mua mới có quyền đánh giá người bán');
+  }
 
   if (txn.notes?.includes('|rated:true')) {
     throw new Error('Giao dịch này đã được đánh giá trước đó');

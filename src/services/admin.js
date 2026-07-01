@@ -127,19 +127,37 @@ export async function deleteListing(listingId) {
 // ============================================================================
 
 export async function getTransactions(filters = {}, page = 1, perPage = 20) {
-  let query = supabase.from('lb_transactions').select('*, buyer:buyer_id(id, name), seller:seller_id(id, name)', { count: 'exact' });
+  // Join book_id để lấy tiêu đề sách phục vụ tìm kiếm và hiển thị
+  let query = supabase.from('lb_transactions').select(
+    '*, buyer:buyer_id(id, name), seller:seller_id(id, name), book_data:book_id(title)',
+    { count: 'exact' }
+  );
   if (filters.status) query = query.eq('status', filters.status);
   if (filters.type) query = query.eq('type', filters.type);
-  if (filters.search) query = query.or(`book.ilike.%${filters.search}%,buyer.name.ilike.%${filters.search}%,seller.name.ilike.%${filters.search}%`);
+  // BUG FIX: Không dùng .or() với FK join (buyer.name, seller.name) vì Supabase không hỗ trợ.
+  // Thay vào đó lọc phía client sau khi đã enrich dữ liệu.
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
   const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false });
   if (error) throw error;
-  const enriched = (data || []).map(t => ({
+
+  let enriched = (data || []).map(t => ({
     ...t,
+    book: t.book_data?.title || t.book || '—',
     buyer_name: t.buyer?.name || '—',
     seller_name: t.seller?.name || '—',
   }));
+
+  // Client-side search trên dữ liệu đã enrich (tên sách, người mua, người bán)
+  if (filters.search) {
+    const s = filters.search.toLowerCase();
+    enriched = enriched.filter(t =>
+      (t.book || '').toLowerCase().includes(s) ||
+      (t.buyer_name || '').toLowerCase().includes(s) ||
+      (t.seller_name || '').toLowerCase().includes(s)
+    );
+  }
+
   return { data: enriched, total: count || 0, page, perPage, totalPages: Math.ceil((count || 0) / perPage) };
 }
 
@@ -361,9 +379,10 @@ export async function getAnalytics(filters = {}) {
   const { data: txns, error: txnErr } = await txnQuery;
   if (txnErr) throw txnErr;
 
-  let userQuery = supabase.from('lb_users').select('join_date, created_at');
-  if (startDate) userQuery = userQuery.gte('join_date', startDate);
-  if (endDate)   userQuery = userQuery.lte('join_date', endDate);
+  // BUG FIX: Dùng created_at để filter thay vì join_date (join_date có thể null hoặc không tồn tại)
+  let userQuery = supabase.from('lb_users').select('created_at');
+  if (startDate) userQuery = userQuery.gte('created_at', startDate);
+  if (endDate)   userQuery = userQuery.lte('created_at', endDate + ' 23:59:59');
   const { data: users, error: userErr } = await userQuery;
   if (userErr) throw userErr;
 
@@ -377,7 +396,7 @@ export async function getAnalytics(filters = {}) {
 
   const usersByDate = {};
   (users || []).forEach(u => {
-    const d = u.join_date ? String(u.join_date).slice(0, 10) : (u.created_at ? String(u.created_at).slice(0, 10) : null);
+    const d = u.created_at ? String(u.created_at).slice(0, 10) : null;
     if (!d) return;
     if (!usersByDate[d]) usersByDate[d] = 0;
     usersByDate[d]++;
@@ -449,7 +468,11 @@ export async function getAllSettings() {
 }
 
 export async function updateSetting(key, value) {
-  const { data, error } = await supabase.from('lb_settings').upsert({ key, value, updated_at: new Date().toISOString() }).eq('key', key).select();
+  // BUG FIX: .upsert().eq() là cú pháp sai — dùng onConflict thay thế
+  const { data, error } = await supabase
+    .from('lb_settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .select();
   if (error) throw error;
   return data[0];
 }
@@ -600,6 +623,19 @@ export async function approveVerification(id, userId) {
     .update({ status: 'active', updated_at: new Date().toISOString() })
     .eq('id', userId);
   if (uErr) throw uErr;
+
+  // BUG FIX: Gửi notification cho sinh viên sau khi được duyệt
+  try {
+    await createSystemNotification(
+      userId,
+      '✅ Thẻ sinh viên đã được xác thực!',
+      'Tài khoản của bạn đã được kích hoạt. Bạn có thể đăng bán và mua sách trên LoopBook ngay bây giờ!',
+      'system'
+    );
+  } catch (notifErr) {
+    // Không để lỗi notification làm fail toàn bộ approve flow
+    console.warn('approveVerification: gửi notification thất bại (không nghiêm trọng):', notifErr?.message);
+  }
 
   return true;
 }
