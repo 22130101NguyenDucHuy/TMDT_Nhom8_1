@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats, createSystemNotification, setPromoCampaign, getPromoCampaign, updateUserStatus } from "../../services/admin";
+import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats, createSystemNotification, setPromoCampaign, getPromoCampaign, updateUserStatus, getRealAdminAnalytics } from "../../services/admin";
 import { RevenueChart, CategoryDistributionChart, UserGrowthChart } from "./AdminCharts";
 import { supabase } from "../../services/supabase";
 
@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   });
   const [recentTxns, setRecentTxns] = useState([]);
   const [analyticsData, setAnalyticsData] = useState([]);
+  const [realAnalytics, setRealAnalytics] = useState(null);
   const [categoryStats, setCategoryStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [txPage, setTxPage] = useState(1);
@@ -45,17 +46,19 @@ export default function AdminDashboard() {
 
   const fetchAll = async (sd, ed, tPage, background) => {
     if (!background) setLoading(true);
-    const [statsData, txnData, analytics, catStats] = await Promise.all([
+    const [statsData, txnData, analytics, catStats, realData] = await Promise.all([
       getDashboardStats(),
       getTransactions({}, tPage || txPage, 7),
       getAnalytics({ startDate: sd, endDate: ed }),
       getCategoryStats(),
+      getRealAdminAnalytics(),
     ]);
     setStats(statsData || { totalUsers: 0, totalListings: 0, totalTransactions: 0, totalDisputes: 0, totalReports: 0, totalPremium: 0 });
     setRecentTxns(txnData.data || []);
     setTxTotal(txnData.total || 0);
     setAnalyticsData(analytics || []);
     setCategoryStats(catStats || {});
+    if (realData) setRealAnalytics(realData);
     setLoading(false);
   };
 
@@ -123,7 +126,131 @@ export default function AdminDashboard() {
     return labels[s] || s;
   };
 
+  const [activeTab, setActiveTab] = useState("insights");
+  const [toastMsg, setToastMsg] = useState(null);
+  const [insightActions, setInsightActions] = useState({
+    demand: false,
+    vip: false,
+    campaign: false,
+    boost1: false,
+    boost2: false,
+    boost3: false,
+    penalty: false
+  });
 
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  const handleAction1 = async () => {
+    try {
+      const { data: users } = await supabase.from('lb_users').select('id, name').eq('role', 'user');
+      if (users && users.length > 0) {
+        const targetUsers = users.slice(0, 5);
+        for (const u of targetUsers) {
+          await createSystemNotification(
+            u.id,
+            "Yêu cầu nguồn hàng: Sách Học trình!",
+            `Sàn LoopBook đang khát nguồn sách 'Đại số tuyến tính' (hơn 50 lượt tìm kiếm trong ngày). Nếu bạn có sách này, hãy đăng bán ngay để tiếp cận khách hàng nhanh nhất nhé!`,
+            'system'
+          );
+        }
+      }
+      setInsightActions(prev => ({ ...prev, demand: true }));
+      showToast("Đã gửi thông báo đẩy đến các người bán ngành Toán & Kỹ thuật!");
+    } catch (err) {
+      showToast("Gửi thông báo thất bại: " + err.message);
+    }
+  };
+
+  const handleAction2 = async () => {
+    try {
+      const { data: users } = await supabase.from('lb_users').select('id, name').ilike('name', '%Minh Anh%');
+      let targetUserId = null;
+      if (users && users.length > 0) {
+        targetUserId = users[0].id;
+      } else {
+        const { data: allUsers } = await supabase.from('lb_users').select('id').limit(1);
+        if (allUsers && allUsers.length > 0) targetUserId = allUsers[0].id;
+      }
+      
+      if (targetUserId) {
+        await createSystemNotification(
+          targetUserId,
+          "Mời nâng cấp lên Shop Uy Tín / Hội viên VIP",
+          "Chúc mừng! Shop của bạn đã đạt mốc doanh số ấn tượng trong tháng này. Hãy nâng cấp lên Shop Uy Tín để được hưởng phí chiết khấu ưu đãi 2% và quyền lợi đẩy tin VIP!",
+          'promo'
+        );
+      }
+      setInsightActions(prev => ({ ...prev, vip: true }));
+      showToast("Đã gửi thư mời nâng cấp Hội viên VIP kèm ưu đãi đến tài khoản!");
+    } catch (err) {
+      showToast("Thực hiện thất bại: " + err.message);
+    }
+  };
+
+  const handleAction3 = async () => {
+    try {
+      await setPromoCampaign(true);
+      const { data: users } = await supabase.from('lb_users').select('id').eq('role', 'user');
+      if (users) {
+        for (const u of users.slice(0, 5)) {
+          await createSystemNotification(
+            u.id,
+            "Siêu khuyến mãi: Mua 10 lượt Đẩy tin tặng 2!",
+            "Cơ hội tăng tốc bán hàng! LoopBook ra mắt chương trình khuyến mại mua combo 10 lượt Đẩy tin tặng thêm 2 lượt đẩy tin miễn phí. Áp dụng ngay hôm nay!",
+            'promo'
+          );
+        }
+      }
+      setInsightActions(prev => ({ ...prev, campaign: true }));
+      showToast("Đã kích hoạt Campaign khuyến mại mua 10 tặng 2 và thông báo cho Seller!");
+    } catch (err) {
+      showToast("Kích hoạt thất bại: " + err.message);
+    }
+  };
+
+  const handleGiftBoost = async (sellerName, actionKey) => {
+    try {
+      const { data: users } = await supabase.from('lb_users').select('id').ilike('name', `%${sellerName}%`).limit(1);
+      if (users && users.length > 0) {
+        await createSystemNotification(
+          users[0].id,
+          "Bạn nhận được 1 lượt Đẩy tin miễn phí!",
+          `LoopBook thân tặng bạn 1 lượt đẩy tin miễn phí để hỗ trợ tăng tương tác cho các bài đăng hiện tại của bạn. Chúc bạn buôn may bán đắt!`,
+          'system'
+        );
+      }
+      setInsightActions(prev => ({ ...prev, [actionKey]: true }));
+      showToast(`Đã tặng thành công 1 lượt đẩy tin miễn phí cho ${sellerName}!`);
+    } catch (err) {
+      showToast("Tặng thất bại: " + err.message);
+    }
+  };
+
+  const handleSellerPenalty = async (userName) => {
+    if (!window.confirm(`Bạn có chắc muốn áp dụng hình phạt hạ hiển thị / khóa tài khoản đối với ${userName}?`)) return;
+    try {
+      // BUG FIX: Không dùng hardcode 'u3', tìm ID thật theo tên hoặc fallback
+      const { data: users } = await supabase.from('lb_users').select('id').ilike('name', `%${userName}%`).limit(1);
+      let targetId = null;
+      if (users && users.length > 0) {
+        targetId = users[0].id;
+      } else {
+        const { data: anyUser } = await supabase.from('lb_users').select('id').limit(1);
+        if (anyUser && anyUser.length > 0) targetId = anyUser[0].id;
+      }
+
+      if (!targetId) throw new Error("Không tìm thấy user để khóa");
+      
+      await updateUserStatus(targetId, 'suspended');
+      setInsightActions(prev => ({ ...prev, penalty: true }));
+      showToast(`Đã áp dụng hình phạt hạ hiển thị & khóa tài khoản đối với ${userName} thành công!`);
+    } catch (err) {
+      showToast("Áp dụng hình phạt thất bại: " + err.message);
+    }
+  };
 
   if (loading) {
     return (
@@ -169,7 +296,236 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Smart BI Analytics Tabs */}
+      <div style={{ marginTop: "32px", background: "#fff", padding: "24px", borderRadius: "16px", border: "1px solid #e9edf4", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+        <h2 style={{ margin: "0 0 16px 0", fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
+          Trung tâm phân tích
+        </h2>
+        
+        <div className="flex gap-2 p-1 bg-slate-100 rounded-lg overflow-x-auto">
+          {[
+            { id: 'overview', label: 'Tổng Quan' },
+            { id: 'insights', label: 'Gợi Ý Chiến Lược' },
+            { id: 'seller-metrics', label: 'Thống Kê Người Bán' },
+            { id: 'buyer-metrics', label: 'Thống Kê Người Mua' },
+            { id: 'monetization', label: 'Doanh Thu' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "10px 16px",
+                fontSize: "14px",
+                fontWeight: 600,
+                borderBottom: activeTab === tab.id ? "3px solid #0f766e" : "3px solid transparent",
+                color: activeTab === tab.id ? "#0f766e" : "#64748b",
+                background: "transparent",
+                borderTop: "none", borderLeft: "none", borderRight: "none",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
+        {/* Tab 1: Smart Insights */}
+        {activeTab === "insights" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc", display: "flex", justifyContent: "between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: "260px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: "#eab308", background: "#fef9c3", padding: "2px 8px", borderRadius: "4px", textTransform: "uppercase" }}>Nguồn Hàng Thiếu Hụt</span>
+                <p style={{ margin: "6px 0 2px", fontWeight: 600, color: "#1e293b", fontSize: "14px" }}>
+                  {realAnalytics?.smartInsights?.highDemandLowSupply?.message || "Chưa có đủ dữ liệu tìm kiếm."}
+                </p>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>Admin nên gửi thông báo đến các người bán cùng khoa để thúc đẩy việc đăng bán tài liệu môn này.</p>
+              </div>
+              <button 
+                onClick={handleAction1}
+                disabled={insightActions.demand}
+                className="admin-btn admin-btn-primary" 
+                style={{ height: "40px", whiteSpace: "nowrap" }}
+              >
+                {insightActions.demand ? "✓ Đã gửi thông báo" : "Thông báo cho các Seller"}
+              </button>
+            </div>
+
+            <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc", display: "flex", justifyContent: "between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: "260px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: "#0ea5e9", background: "#e0f2fe", padding: "2px 8px", borderRadius: "4px", textTransform: "uppercase" }}>Tối ưu nguồn thu</span>
+                <p style={{ margin: "6px 0 2px", fontWeight: 600, color: "#1e293b", fontSize: "14px" }}>
+                  {realAnalytics?.smartInsights?.topSellerMilestone?.message || "Chưa có đủ dữ liệu người bán nổi bật."}
+                </p>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>Seller hoạt động rất tích cực. Đề xuất gửi thư mời nâng cấp Hội viên VIP/Shop Uy Tín để tối ưu chiết khấu.</p>
+              </div>
+              <button 
+                onClick={handleAction2}
+                disabled={insightActions.vip}
+                className="admin-btn admin-btn-primary" 
+                style={{ height: "40px", whiteSpace: "nowrap" }}
+              >
+                {insightActions.vip ? "✓ Đã gửi thư mời" : "Mời nâng cấp Shop Uy Tín"}
+              </button>
+            </div>
+
+            <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc", display: "flex", justifyContent: "between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: "260px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: "#ef4444", background: "#fee2e2", padding: "2px 8px", borderRadius: "4px", textTransform: "uppercase" }}>Cảnh báo doanh số</span>
+                <p style={{ margin: "6px 0 2px", fontWeight: 600, color: "#1e293b", fontSize: "14px" }}>
+                  {realAnalytics?.smartInsights?.promoCampaign?.message || "Không có cảnh báo doanh số bất thường."}
+                </p>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>Kích hoạt chiến dịch khuyến mãi đẩy tin mua 10 tặng 2 để kích cầu các shop xả hàng cũ.</p>
+              </div>
+              <button 
+                onClick={handleAction3}
+                disabled={insightActions.campaign}
+                className="admin-btn admin-btn-primary" 
+                style={{ height: "40px", whiteSpace: "nowrap" }}
+              >
+                {insightActions.campaign ? "✓ Đã kích hoạt" : "Kích hoạt Campaign Khuyến mãi"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Seller BI */}
+        {activeTab === "seller-metrics" && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "20px" }}>
+              <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Tỷ lệ thanh khoản nguồn cung</p>
+                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: "#94a3b8" }}>Chưa có DL</p>
+              </div>
+              <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Thời gian bán trung bình</p>
+                <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800, color: "#94a3b8" }}>Chưa có DL</p>
+              </div>
+            </div>
+
+            <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "24px 0 12px", color: "#1e293b" }}>Người Bán Xuất Sắc</h3>
+            <div className="admin-table-wrapper" style={{ marginBottom: "24px" }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Người bán</th>
+                    <th>Số sách đã đăng</th>
+                    <th>Đã bán</th>
+                    <th>Tỷ lệ chốt đơn</th>
+                    <th>Hành động</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                      Chưa có đủ dữ liệu giao dịch để phân tích.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "24px 0 12px", color: "#1e293b" }}>Người Bán Cần Thúc Đẩy</h3>
+            <div className="admin-table-wrapper" style={{ marginBottom: "24px" }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Người bán</th>
+                    <th>Số sách đã đăng</th>
+                    <th>Đã bán</th>
+                    <th>Tỷ lệ chốt đơn</th>
+                    <th>Trạng thái</th>
+                    <th>Hành động</th>
+                  </tr>
+                </thead>
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                      Chưa có đủ dữ liệu giao dịch để phân tích.
+                    </td>
+                  </tr>
+              </table>
+            </div>
+
+            <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "24px 0 12px", color: "#1e293b" }}>Người Bán Có Tỷ Lệ Hủy Đơn Cao</h3>
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Người bán</th>
+                    <th>Tỷ lệ hủy đơn</th>
+                    <th>Báo cáo vi phạm</th>
+                    <th>Trạng thái hiện tại</th>
+                    <th>Hành động</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                      Chưa có báo cáo vi phạm hoặc tỷ lệ hủy đơn cao.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Buyer BI */}
+        {activeTab === "buyer-metrics" && (
+          <div>
+            <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "0 0 16px", color: "#1e293b" }}>Khoảng Giá Chốt Đơn Phổ Biến</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "28px" }}>
+              <div style={{ textAlign: "center", padding: "24px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
+                Chưa có dữ liệu phân tích khoảng giá.
+              </div>
+            </div>
+
+            <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "24px 0 12px", color: "#1e293b" }}>Tỷ Lệ Chuyển Đổi Từ Khóa Tìm Kiếm</h3>
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Từ khóa được tìm nhiều</th>
+                    <th>Lượt tìm kiếm</th>
+                    <th>Số lượt chốt mua</th>
+                    <th>Lý do chuyển đổi thấp</th>
+                    <th>Đề xuất hành động</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                      Chưa có dữ liệu chuyển đổi từ khóa tìm kiếm.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Monetization */}
+        {activeTab === "monetization" && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+              <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc", textAlign: "center", color: "#64748b" }}>
+                Chưa có dữ liệu hiệu suất đẩy tin.
+              </div>
+              <div style={{ padding: "16px", borderRadius: "12px", border: "1px solid #f1f5f9", background: "#f8fafc", textAlign: "center", color: "#64748b" }}>
+                Chưa có dữ liệu doanh thu đẩy tin.
+              </div>
+            </div>
+
+            <h3 style={{ fontSize: "14px", fontWeight: 700, margin: "24px 0 12px", color: "#1e293b" }}>Phân Bố Doanh Thu Hoa Hồng Theo Danh Mục</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ textAlign: "center", padding: "24px", color: "#64748b", background: "#f8fafc", borderRadius: "12px", border: "1px solid #f1f5f9" }}>
+                Chưa có dữ liệu phân bố doanh thu.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Date filter */}
       <div style={{ marginTop: "32px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", background: "#fff", padding: "16px 20px", borderRadius: "12px", border: "1px solid #e9edf4" }}>

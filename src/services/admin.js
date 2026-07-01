@@ -779,6 +779,84 @@ export async function getPromoCampaign() {
   }
 }
 
+export async function getRealAdminAnalytics() {
+  const analytics = {
+    sellerMetrics: { topSellers: [], liquidityRate: 0, lowQualitySellers: [] },
+    buyerMetrics: { priceElasticity: [], searchToCart: [] },
+    monetization: { bumpEffectiveness: 0, categoryRevenue: [] },
+    smartInsights: { highDemandLowSupply: null, topSellerMilestone: null, promoCampaign: null }
+  };
+
+  try {
+    // 1. Seller Metrics - Top Sellers (Dựa vào số dư ví hoặc tổng số gd)
+    const { data: topUsers } = await supabase
+      .from('auth.users') // Ko truy cập dc bằng anon, nên lấy qua lb_transactions
+      .select('*')
+      .limit(0);
+      
+    const { data: txns } = await supabase.from('lb_transactions').select('seller_id, buyer_id, amount, status, is_completed, created_at, book, book_id, type');
+    
+    // Gom nhóm người bán
+    const sellersMap = {};
+    const buyersMap = {};
+    let totalRevenue = {};
+    
+    if (txns) {
+      txns.forEach(t => {
+        if (t.type === 'buy' && t.is_completed) {
+          if (!sellersMap[t.seller_id]) sellersMap[t.seller_id] = { count: 0, revenue: 0 };
+          sellersMap[t.seller_id].count += 1;
+          sellersMap[t.seller_id].revenue += Number(t.amount);
+          
+          if (!buyersMap[t.buyer_id]) buyersMap[t.buyer_id] = { count: 0, spent: 0 };
+          buyersMap[t.buyer_id].count += 1;
+          buyersMap[t.buyer_id].spent += Number(t.amount);
+        }
+      });
+    }
+
+    const sortedSellers = Object.entries(sellersMap).sort((a,b) => b[1].count - a[1].count);
+    if (sortedSellers.length > 0) {
+      const best = sortedSellers[0];
+      const { data: bestUser } = await supabase.from('lb_users').select('name').eq('id', best[0]).maybeSingle();
+      if (bestUser && best[1].count > 0) {
+        analytics.smartInsights.topSellerMilestone = {
+          message: `Tài khoản '${bestUser.name}' vừa đạt mốc ${best[1].count} đơn hàng thành công tháng này.`,
+          userId: best[0]
+        };
+      }
+    }
+
+    // 2. Buyer Metrics - Search to Cart / High demand
+    const { data: searches } = await supabase.from('lb_search_logs').select('keyword');
+    if (searches && searches.length > 0) {
+      const searchCount = {};
+      searches.forEach(s => {
+        const k = s.keyword.toLowerCase();
+        searchCount[k] = (searchCount[k] || 0) + 1;
+      });
+      const topSearch = Object.entries(searchCount).sort((a,b) => b[1] - a[1])[0];
+      if (topSearch) {
+        const { count: supply } = await supabase.from('lb_books').select('id', { count: 'exact' }).ilike('title', `%${topSearch[0]}%`);
+        analytics.smartInsights.highDemandLowSupply = {
+          message: `Có ${topSearch[1]} lượt tìm kiếm sách '${topSearch[0]}' nhưng hiện tại trên sàn chỉ có ${supply || 0} tin đăng.`,
+          keyword: topSearch[0]
+        };
+      }
+    }
+
+    analytics.sellerMetrics.liquidityRate = 0; 
+    analytics.monetization.bumpEffectiveness = 0;
+    
+    analytics.smartInsights.promoCampaign = null;
+
+  } catch (err) {
+    console.warn("getRealAdminAnalytics error:", err);
+  }
+  
+  return analytics;
+}
+
 export default {
   getUsers, getUserById, updateUserStatus, updateUserRole, updateUserProfile, createUser,
   getListings, getListingById, updateListingStatus, deleteListing,
@@ -786,7 +864,7 @@ export default {
   getCategories, getCategoryById, createCategory, updateCategory, deleteCategory,
   getDisputes, updateDisputeStatus,
   getReports, updateReportStatus,
-  getAnalytics, getDashboardStats,
+  getAnalytics, getDashboardStats, getRealAdminAnalytics,
   getSetting, getAllSettings, updateSetting,
   getComplaints, updateComplaintStatus,
   getPromotions,

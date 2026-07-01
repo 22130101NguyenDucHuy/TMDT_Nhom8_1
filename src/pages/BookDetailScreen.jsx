@@ -89,6 +89,12 @@ export default function BookDetailScreen() {
         .eq("id", bookId)
         .single();
       if (bookData) {
+        // Track view
+        if (user) {
+          supabase.from('lb_view_logs').insert([{ user_id: user.id, book_id: bookData.id, category: bookData.category }]).then(() => {});
+        } else {
+          supabase.from('lb_view_logs').insert([{ book_id: bookData.id, category: bookData.category }]).then(() => {});
+        }
         const mainImgs = resolveBookImages(bookData.id, bookData.images);
         setBook({
           ...bookData,

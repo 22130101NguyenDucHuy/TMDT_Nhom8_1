@@ -24,7 +24,13 @@ export default function TopNav() {
 
   const handleSearch = (e) => {
     if (e.key === "Enter" && searchQuery.trim()) {
-      navigate(`/kham-pha?q=${encodeURIComponent(searchQuery.trim())}`);
+      const q = searchQuery.trim();
+      if (user) {
+        supabase.from('lb_search_logs').insert([{ user_id: user.id, keyword: q }]).then(() => {});
+      } else {
+        supabase.from('lb_search_logs').insert([{ keyword: q }]).then(() => {});
+      }
+      navigate(`/kham-pha?q=${encodeURIComponent(q)}`);
       setSearchQuery("");
     }
   };

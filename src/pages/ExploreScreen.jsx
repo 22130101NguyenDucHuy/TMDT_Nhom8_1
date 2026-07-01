@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../services/supabase";
 import BookCard from "../components/common/BookCard";
 import { resolveBookImages } from "../utils/imageResolver";
@@ -47,6 +48,7 @@ const normalizeBook = (b) => {
 
 export default function ExploreScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
 
   const [books, setBooks]             = useState([]);
   const [categories, setCategories]   = useState([]);
@@ -278,6 +280,16 @@ export default function ExploreScreen() {
               placeholder="Tìm kiếm tài liệu..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchQuery.trim()) {
+                  const q = searchQuery.trim();
+                  if (user) {
+                    supabase.from('lb_search_logs').insert([{ user_id: user.id, keyword: q }]).then(() => {});
+                  } else {
+                    supabase.from('lb_search_logs').insert([{ keyword: q }]).then(() => {});
+                  }
+                }
+              }}
               className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-200 bg-white transition-colors"
             />
             {searchQuery && (
