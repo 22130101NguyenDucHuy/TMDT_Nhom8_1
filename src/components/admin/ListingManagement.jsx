@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { getListings, updateListingStatus, deleteListing } from "../../services/admin";
 import { useAuth } from "../../contexts/AuthContext";
+import { getBookImageUrl } from "../../utils/imageResolver";
 
 function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel, confirmVariant }) {
   return (
@@ -386,6 +387,7 @@ export default function ListingManagement() {
         <table className="admin-table">
           <thead>
             <tr>
+              <th style={{ width: "60px" }}>Ảnh</th>
               <th>Tên Sách</th>
               <th>Người Bán</th>
               <th>Giá</th>
@@ -397,13 +399,13 @@ export default function ListingManagement() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
+                <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
                   Đang tải...
                 </td>
               </tr>
             ) : listings.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
+                <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>
                   Không có listing nào
                 </td>
               </tr>
@@ -413,6 +415,14 @@ export default function ListingManagement() {
                 style={{ cursor: "pointer" }}
                 className="admin-table-row-link"
               >
+                <td>
+                  <img
+                    src={getBookImageUrl(listing)}
+                    alt={listing.title}
+                    style={{ width: "48px", height: "64px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e9edf4", display: "block" }}
+                    onError={(e) => { e.target.style.display = "none" }}
+                  />
+                </td>
                 <td>
                   <div>
                     <strong style={{ display: "block" }}>{listing.title}</strong>
