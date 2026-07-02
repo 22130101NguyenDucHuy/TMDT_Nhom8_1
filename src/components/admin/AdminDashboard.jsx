@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats, createSystemNotification, setPromoCampaign, getInsightActions, saveInsightActions, updateUserStatus, getRealAdminAnalytics } from "../../services/admin";
+import { getTransactions, getDashboardStats, getAnalytics, getCategoryStats, createSystemNotification, setPromoCampaign, getInsightActions, saveInsightActions, resetInsightActions, updateUserStatus, getRealAdminAnalytics } from "../../services/admin";
 import { RevenueChart, CategoryDistributionChart, UserGrowthChart } from "./AdminCharts";
 import { supabase } from "../../services/supabase";
 
@@ -149,6 +149,16 @@ export default function AdminDashboard() {
       saveInsightActions(next).catch(err => console.warn('saveInsightActions:', err.message));
       return next;
     });
+  };
+
+  const handleResetActions = async () => {
+    try {
+      const resetState = await resetInsightActions();
+      setInsightActions(resetState);
+      showToast("Đã reset toàn bộ trạng thái hành động về chưa kích hoạt!");
+    } catch (err) {
+      showToast("Reset thất bại: " + err.message);
+    }
   };
 
   const showToast = (msg) => {
@@ -308,9 +318,19 @@ export default function AdminDashboard() {
 
       {/* Smart BI Analytics Tabs */}
       <div style={{ marginTop: "32px", background: "#fff", padding: "24px", borderRadius: "16px", border: "1px solid #e9edf4", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-        <h2 style={{ margin: "0 0 16px 0", fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
-          Trung tâm phân tích
-        </h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
+            Trung tâm phân tích
+          </h2>
+          <button
+            onClick={handleResetActions}
+            className="admin-btn"
+            style={{ fontSize: "12px", padding: "4px 12px", color: "#64748b", borderColor: "#cbd5e1" }}
+            title="Đặt lại tất cả trạng thái nút về Chưa kích hoạt để demo lại từ đầu"
+          >
+            🔄 Reset trạng thái nút
+          </button>
+        </div>
         
         <div className="flex gap-2 p-1 bg-slate-100 rounded-lg overflow-x-auto">
           {[

@@ -817,6 +817,23 @@ export async function saveInsightActions(actions) {
   return true;
 }
 
+export async function resetInsightActions() {
+  const defaults = { demand: false, vip: false, campaign: false };
+  await Promise.all([
+    supabase.from('lb_settings').upsert({
+      key: INSIGHT_ACTIONS_KEY,
+      value: JSON.stringify(defaults),
+      group_name: 'admin',
+      is_public: false,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' }),
+    setPromoCampaign(false),
+  ]);
+  return defaults;
+}
+
+
+
 export async function getRealAdminAnalytics() {
   const analytics = {
     sellerMetrics: {
@@ -1241,6 +1258,6 @@ export default {
   getFeeConfigs, updateFeeConfig,
   getNotifications, markNotificationRead,
   getVerifications, approveVerification, rejectVerification,
-  createSystemNotification, setPromoCampaign, getPromoCampaign, getInsightActions, saveInsightActions,
+  createSystemNotification, setPromoCampaign, getPromoCampaign, getInsightActions, saveInsightActions, resetInsightActions,
   getWithdrawals, approveWithdrawal, rejectWithdrawal,
 };
