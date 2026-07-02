@@ -62,7 +62,12 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(startDate, endDate, 1); }, [startDate, endDate]);
+  useEffect(() => { fetchAll(startDate, endDate, 1); }, []);
+  useEffect(() => {
+    if (loading) return;
+    setTxPage(1);
+    fetchAll(startDate, endDate, 1, true);
+  }, [startDate, endDate]);
   useEffect(() => { if (!loading) fetchAll(startDate, endDate, txPage, true); }, [txPage]);
 
   // Quick date range presets
@@ -260,15 +265,6 @@ export default function AdminDashboard() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="admin-page">
-        <div className="admin-header"><h1>Dashboard</h1></div>
-        <div style={{ textAlign: "center", padding: "40px", color: "#56647e" }}>Đang tải dữ liệu...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="admin-page">
       {toastMsg && (
@@ -282,6 +278,12 @@ export default function AdminDashboard() {
 
       <div className="admin-header">
         <h1>Dashboard</h1>
+        {loading && (
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal-700" />
+            Đang tải...
+          </div>
+        )}
       </div>
 
       {/* Stats cards */}
